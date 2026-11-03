@@ -105,6 +105,10 @@
   .modal-box { background: #1e293b; border: 1px solid rgba(148, 163, 184, .2); border-radius: 1.2rem; padding: 1.3rem; width: 100%; max-width: 440px; max-height: calc(100dvh - 32px); overflow: auto; box-shadow: 0 30px 60px rgba(0, 0, 0, .5); }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #f8fafc; color: #0f172a; padding: .7rem 1.1rem; border-radius: .8rem; font-weight: 600; z-index: 200; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); max-width: calc(100vw - 32px); }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .net-banner { position: fixed; top: 0; left: 0; right: 0; background: #f59e0b; color: #111827; text-align: center; font-weight: 700; padding: 8px; z-index: 150; }
+  .room-code { font-size: 2.6rem; font-weight: 900; letter-spacing: .35em; font-family: ui-monospace, monospace; padding-left: .35em; }
+  .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(148, 163, 184, .3); border-top-color: #f59e0b; animation: spin 1s linear infinite; margin: 0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   @media (prefers-reduced-motion: reduce) {
     .token, .cell, .turn-banner { transition: none !important; }
@@ -117,6 +121,7 @@
 <div id="app">
   <section id="screen-home" class="screen"></section>
   <section id="screen-setup" class="screen" hidden></section>
+  <section id="screen-lobby" class="screen" hidden></section>
   <section id="screen-game" class="screen" hidden>
     <header class="flex items-center gap-2 px-2 py-2 max-w-[1240px] mx-auto">
       <button class="icon-btn" id="btn-exit" aria-label="Voltar ao menu"><i class="fa-solid fa-arrow-left"></i></button>
@@ -154,6 +159,7 @@
   </section>
 </div>
 <div id="modal-root"></div>
+<div id="net-banner" class="net-banner" role="status" hidden><i class="fa-solid fa-wifi"></i> Reconectando…</div>
 
 <script>
 // ENGINE-START
@@ -238,7 +244,7 @@ const LudoEngine = (() => {
     const seats = players.slice()
       .sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color))
       .map((p, i) => ({
-        seat: i, color: p.color, name: p.name, avatar: p.avatar || null,
+        seat: i, color: p.color, name: p.name, avatar: p.avatar || null, owner: p.owner || null,
         isBot: !!p.isBot, botLevel: p.isBot ? (p.botLevel || 'medium') : null,
         connected: true, afk: false, finishedRank: null, timeouts: 0,
       }));
@@ -777,7 +783,7 @@ async function processPhoto(file) {
   }
 }
 
-function openAvatarPicker() {
+function openAvatarPicker(onDone = renderHome) {
   const fileInput = h('input', { type: 'file', accept: 'image/*', class: 'sr-only' });
   let close;
   fileInput.addEventListener('change', async () => {
@@ -787,13 +793,13 @@ function openAvatarPicker() {
       profile.avatar = await processPhoto(f);
       saveProfile();
       close();
-      renderHome();
+      onDone();
     } catch { toast('Não foi possível ler a imagem.'); }
   });
   const grid = h('div', { class: 'grid grid-cols-4 gap-2 my-4' },
     AVATARS.map(a => h('button', {
       class: 'btn btn-ghost text-2xl', 'aria-label': `Avatar ${a}`,
-      onclick: () => { profile.avatar = a; saveProfile(); close(); renderHome(); },
+      onclick: () => { profile.avatar = a; saveProfile(); close(); onDone(); },
     }, a)));
   close = openModal(h('div', {},
     h('h2', { class: 'text-lg font-bold', text: 'Escolha seu avatar' }),
@@ -805,7 +811,7 @@ function openAvatarPicker() {
 
 // ---------- Navegação ----------
 function showScreen(name) {
-  for (const id of ['home', 'setup', 'game']) $('#screen-' + id).hidden = id !== name;
+  for (const id of ['home', 'setup', 'lobby', 'game']) $('#screen-' + id).hidden = id !== name;
   if (name === 'home') renderHome();
   window.scrollTo(0, 0);
 }
@@ -822,6 +828,8 @@ function renderHome() {
   const root = $('#screen-home');
   root.innerHTML = '';
   const saved = latestSave();
+  const lastHost = Store.get('ludo:lastHost', null);
+  const hostSave = lastHost ? Store.get('ludo:host:' + lastHost, null) : null;
   const nameInput = h('input', { type: 'text', maxlength: '12', placeholder: 'Seu apelido', 'aria-label': 'Apelido', class: 'flex-1 min-w-0' });
   nameInput.value = profile.name || '';
   nameInput.addEventListener('input', () => { profile.name = nameInput.value.slice(0, 12); saveProfile(); });
@@ -837,7 +845,7 @@ function renderHome() {
           h('p', { class: 'text-slate-400 text-sm', text: 'O Ludo clássico, no navegador' }))),
       h('button', { class: 'icon-btn', 'data-mute': '', onclick: () => Sound.toggle() })),
     h('div', { class: 'card flex items-center gap-3' },
-      h('button', { class: 'shrink-0', 'aria-label': 'Trocar avatar', onclick: openAvatarPicker },
+      h('button', { class: 'shrink-0', 'aria-label': 'Trocar avatar', onclick: () => openAvatarPicker() },
         avatarEl(profile.avatar, null, '!w-14 !h-14 !text-3xl')),
       nameInput),
     saved ? h('button', { class: 'btn btn-primary w-full text-lg', onclick: () => resumeGame(saved) },
@@ -847,10 +855,12 @@ function renderHome() {
       h('i', { class: 'fa-solid fa-robot' }), 'Jogar Sozinho'),
     h('button', { class: 'btn btn-ghost w-full', onclick: () => { renderLocalSetup(); showScreen('setup'); } },
       h('i', { class: 'fa-solid fa-users' }), 'Jogar no mesmo aparelho'),
+    hostSave ? h('button', { class: 'btn btn-ghost w-full', onclick: () => hostRoom(hostSave) },
+      h('i', { class: 'fa-solid fa-door-open' }), `Voltar à sala ${hostSave.lobby.code}`) : null,
     h('div', { class: 'grid grid-cols-2 gap-3' },
-      h('button', { class: 'btn btn-ghost', disabled: true, title: 'Em breve' }, h('i', { class: 'fa-solid fa-plus' }), 'Criar Sala'),
-      h('button', { class: 'btn btn-ghost', disabled: true, title: 'Em breve' }, h('i', { class: 'fa-solid fa-right-to-bracket' }), 'Entrar em Sala')),
-    h('p', { class: 'text-center text-xs text-slate-500', text: 'Salas online chegam na próxima versão.' }),
+      h('button', { class: 'btn btn-ghost', onclick: () => hostRoom(null) }, h('i', { class: 'fa-solid fa-plus' }), 'Criar Sala'),
+      h('button', { class: 'btn btn-ghost', onclick: () => openJoin('') }, h('i', { class: 'fa-solid fa-right-to-bracket' }), 'Entrar em Sala')),
+    h('p', { class: 'text-center text-xs text-slate-500', text: 'Salas online: cada pessoa joga do próprio aparelho.' }),
   ));
   updateMuteButtons();
 }
@@ -1056,7 +1066,19 @@ const Game = {
 };
 
 const currentSeat = () => Game.state.seats[Game.state.turn.seat];
-const isAuto = (seat) => seat.isBot || seat.afk;
+// Assento jogado pelo algoritmo: robô, ausente ou desconectado
+const isAuto = (seat) => seat.isBot || seat.afk || seat.connected === false;
+// Assento controlado por quem está neste aparelho
+function isLocalSeat(seat) {
+  if (!seat || seat.isBot) return false;
+  if (Game.state.mode !== 'online') return true;
+  return seat.owner != null && seat.owner === Net.myId;
+}
+function canControl(seat) {
+  if (!isLocalSeat(seat)) return false;
+  if (Net.role === 'client') return Net.connected && !Net.pending;
+  return !isAuto(seat);
+}
 const humanSeats = () => Game.state.seats.filter(s => !s.isBot);
 const seatLabel = (seat) => `${CMETA[seat.color].sym} ${seat.name}`;
 const botDelay = () => (Game.fastBots ? 150 : SPEED_MS[Game.config.speed] || 800);
@@ -1088,7 +1110,8 @@ function loadGame(state) {
   Game.fastBots = !!state.humansDoneHandled;
   Game.statusOverride = null;
   Game.announcedTurn = null;
-  $('#game-title').textContent = state.mode === 'solo' ? 'Modo Solo' : 'Mesmo aparelho';
+  Game.resultsShown = false;
+  $('#game-title').textContent = state.mode === 'solo' ? 'Modo Solo' : state.mode === 'online' ? `Sala ${Net.code}` : 'Mesmo aparelho';
   showScreen('game');
   buildBoard();
   buildTokens();
@@ -1109,6 +1132,7 @@ function clearTimers() {
 function save() {
   const s = Game.state;
   if (!s) return;
+  if (s.mode === 'online') { Net.saveHost(); return; }
   const key = s.mode === 'solo' ? 'ludo:solo' : 'ludo:local';
   if (s.phase === 'finished') Store.del(key);
   else Store.set(key, { state: s, savedAt: Date.now() });
@@ -1117,9 +1141,10 @@ function save() {
 async function runFirstDraw() {
   Game.busy = true;
   const res = E.chooseFirst(Game.state, E.cryptoRng);
+  pushLog(`${seatLabel(Game.state.seats[res.winner])} começa`);
+  Net.broadcastAction(res.events);
   await showDrawOverlay(res);
   Game.busy = false;
-  pushLog(`${seatLabel(Game.state.seats[res.winner])} começa`);
   save();
   proceed();
 }
@@ -1153,11 +1178,17 @@ async function showDrawOverlay(res) {
 }
 
 // Decide o próximo passo automático depois de cada mudança de estado.
+// No online só o anfitrião decide; ao final publica o estado aos convidados.
 function proceed() {
   clearTimers();
   const s = Game.state;
-  if (!s) return;
+  if (!s || Net.role === 'client') return;
+  scheduleNext(s);
   render();
+  Net.broadcastState();
+}
+
+function scheduleNext(s) {
   if (s.phase !== 'playing' || Game.paused || Game.busy) return;
   const seat = currentSeat();
   if (isAuto(seat)) {
@@ -1166,12 +1197,12 @@ function proceed() {
     return;
   }
   if (s.turn.awaiting === 'move' && s.turn.validMoves.length === 1 && s.rules.autoSingleMove) {
-    Game.botTimer = setTimeout(() => actMove(s.turn.validMoves[0], true), 450);
+    Game.botTimer = setTimeout(() => actMove(s.turn.validMoves[0], 'auto'), 450);
     return;
   }
   if (s.turn.awaiting === 'roll' && Game.announcedTurn !== s.turnNumber) {
     Game.announcedTurn = s.turnNumber;
-    Sound.play('turn');
+    if (isLocalSeat(seat)) Sound.play('turn');
     if (s.mode === 'local' && humanSeats().length >= 2) announce(seat);
   }
   startTurnTimer();
@@ -1191,6 +1222,7 @@ function startTurnTimer() {
   const t = Game.config.timer;
   if (!t || !t.enabled) return;
   Game.turnMs = (s.rules.quickMode ? 10 : t.seconds) * 1000;
+  s.turn.turnMs = Game.turnMs;
   if (!s.turn.deadline) s.turn.deadline = Date.now() + Game.turnMs;
   Game.turnTimer = setTimeout(onTimeout, Math.max(0, s.turn.deadline - Date.now()));
 }
@@ -1205,8 +1237,8 @@ function onTimeout() {
     seat.afk = true;
     toast(`${seat.name} está ausente — o robô assumiu. Toque na tela para voltar.`);
   }
-  if (s.turn.awaiting === 'roll') actRoll(true);
-  else actMove(E.chooseMove(s, 'medium'), true);
+  if (s.turn.awaiting === 'roll') actRoll('auto');
+  else actMove(E.chooseMove(s, 'medium'), 'auto');
 }
 
 async function botAct() {
@@ -1214,40 +1246,47 @@ async function botAct() {
   if (!s || Game.busy || Game.paused || s.phase !== 'playing') return;
   const seat = currentSeat();
   if (!isAuto(seat)) return;
-  if (s.turn.awaiting === 'roll') await actRoll(true);
-  else await actMove(E.chooseMove(s, seat.isBot ? seat.botLevel : 'medium'), true);
+  if (s.turn.awaiting === 'roll') await actRoll('auto');
+  else await actMove(E.chooseMove(s, seat.isBot ? seat.botLevel : 'medium'), 'auto');
 }
 
-async function actRoll(auto = false) {
+// source: 'local' (quem está no aparelho), 'remote' (intenção validada de um convidado), 'auto' (robô/timer)
+async function actRoll(source = 'local') {
   const s = Game.state;
   if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'roll') return;
   const seat = currentSeat();
-  if (!auto) {
-    if (isAuto(seat)) return;
-    seat.timeouts = 0;
+  if (Net.role === 'client') {
+    if (source === 'local' && canControl(seat)) Net.request('ROLL_REQUEST', {});
+    return;
   }
+  if (source === 'local' && !canControl(seat)) return;
+  if (source !== 'auto') seat.timeouts = 0;
   clearTimers();
   Game.busy = true;
   render();
   const events = E.roll(s, E.cryptoRng);
+  Net.broadcastAction(events);
   await playEvents(events);
   Game.busy = false;
   afterAction();
 }
 
-async function actMove(piece, auto = false) {
+async function actMove(piece, source = 'local') {
   const s = Game.state;
   if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'move') return;
   if (!s.turn.validMoves.includes(piece)) return;
   const seat = currentSeat();
-  if (!auto) {
-    if (isAuto(seat)) return;
-    seat.timeouts = 0;
+  hidePreview();
+  if (Net.role === 'client') {
+    if (source === 'local' && canControl(seat)) Net.request('MOVE_REQUEST', { pieceId: piece });
+    return;
   }
+  if (source === 'local' && !canControl(seat)) return;
+  if (source !== 'auto') seat.timeouts = 0;
   clearTimers();
   Game.busy = true;
-  hidePreview();
   const events = E.move(s, piece);
+  Net.broadcastAction(events);
   await playEvents(events);
   Game.busy = false;
   afterAction();
@@ -1257,9 +1296,9 @@ function afterAction() {
   const s = Game.state;
   Game.statusOverride = null;
   save();
-  if (s.phase === 'finished') { render(); showResults(); return; }
+  if (s.phase === 'finished') { proceed(); showResults(); return; }
   const humans = humanSeats();
-  if (!s.humansDoneHandled && humans.length && humans.every(x => x.finishedRank != null)) {
+  if (s.mode !== 'online' && !s.humansDoneHandled && humans.length && humans.every(x => x.finishedRank != null)) {
     s.humansDoneHandled = true;
     save();
     render();
@@ -1289,6 +1328,9 @@ async function playEvents(events) {
   for (const e of events) {
     const seat = e.seat != null ? s.seats[e.seat] : null;
     switch (e.kind) {
+      case 'FIRST': // só os convidados recebem o sorteio como evento
+        await showDrawOverlay(e);
+        break;
       case 'ROLL':
         Sound.play('dice');
         Game.statusOverride = `${seat.name} rolou…`;
@@ -1460,7 +1502,7 @@ function canPick(color, i) {
   const s = Game.state;
   if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'move') return false;
   const seat = currentSeat();
-  return !isAuto(seat) && seat.color === color && s.turn.validMoves.includes(i);
+  return canControl(seat) && seat.color === color && s.turn.validMoves.includes(i);
 }
 
 function attachTokenHandlers(el, color, i) {
@@ -1518,7 +1560,7 @@ function layoutTokens(returning = new Set()) {
   }
 
   const t = s.turn;
-  const pickable = s.phase === 'playing' && !Game.busy && !Game.paused && t.awaiting === 'move' && !isAuto(currentSeat());
+  const pickable = s.phase === 'playing' && !Game.busy && !Game.paused && t.awaiting === 'move' && canControl(currentSeat());
   const turnColor = s.phase === 'playing' ? currentSeat().color : null;
   const OFFS = { 1: [[0, 0]], 2: [[-0.2, 0], [0.2, 0]], 3: [[-0.2, -0.15], [0.2, -0.15], [0, 0.2]], 4: [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]] };
 
@@ -1569,6 +1611,7 @@ function render() {
   const pb = $('#btn-pause');
   pb.innerHTML = `<i class="fa-solid ${Game.paused ? 'fa-play' : 'fa-pause'}"></i>`;
   pb.setAttribute('aria-label', Game.paused ? 'Continuar' : 'Pausar');
+  pb.style.display = Game.state.mode === 'online' ? 'none' : '';
   updateMuteButtons();
 }
 
@@ -1582,11 +1625,14 @@ function renderStatus() {
   el.style.setProperty('--c', `var(--${seat.color})`);
   if (Game.statusOverride) { el.textContent = Game.statusOverride; return; }
   if (Game.paused) { el.textContent = 'Jogo pausado'; return; }
-  const human = !isAuto(seat);
   let action;
-  if (human) action = s.turn.awaiting === 'roll' ? 'role o dado' : 'escolha um peão';
-  else action = s.turn.awaiting === 'roll' ? 'vai rolar…' : 'pensando…';
-  el.append('Vez de ', h('strong', { text: seat.name }), seat.isBot ? ' 🤖' : '', seat.afk ? ' (ausente)' : '', ` ${CMETA[seat.color].sym} — ${action}`);
+  if (isLocalSeat(seat) && (Net.role === 'client' || !isAuto(seat))) {
+    if (Net.pending) action = 'enviando…';
+    else action = s.turn.awaiting === 'roll' ? 'role o dado' : 'escolha um peão';
+  } else if (isAuto(seat)) action = s.turn.awaiting === 'roll' ? 'vai rolar…' : 'pensando…';
+  else action = 'jogando…';
+  const tag = seat.connected === false ? ' (desconectado)' : seat.afk ? ' (ausente)' : '';
+  el.append('Vez de ', h('strong', { text: seat.name }), seat.isBot ? ' 🤖' : '', tag, ` ${CMETA[seat.color].sym} — ${action}`);
 }
 
 function renderPlayers() {
@@ -1599,7 +1645,9 @@ function renderPlayers() {
     const current = s.phase === 'playing' && s.turn.seat === seat.seat;
     const tags = [];
     if (seat.isBot) tags.push(h('span', { class: 'badge', text: `🤖 ${LEVEL_NAME[seat.botLevel]}` }));
-    if (seat.afk) tags.push(h('span', { class: 'badge !bg-amber-500/30', text: 'ausente' }));
+    if (s.mode === 'online' && isLocalSeat(seat)) tags.push(h('span', { class: 'badge !bg-emerald-500/30', text: 'você' }));
+    if (seat.connected === false) tags.push(h('span', { class: 'badge !bg-red-500/30', text: 'offline' }));
+    else if (seat.afk) tags.push(h('span', { class: 'badge !bg-amber-500/30', text: 'ausente' }));
     list.append(h('div', { class: 'player-row' + (current ? ' current' : '') + (seat.finishedRank ? ' done' : ''), style: `--c:var(--${seat.color})` },
       avatarEl(seat.avatar, seat.color),
       h('div', { class: 'flex-1 min-w-0' },
@@ -1614,13 +1662,13 @@ function renderDicePanel() {
   const btn = $('#die-btn');
   const playing = s.phase === 'playing';
   const seat = playing ? currentSeat() : null;
-  const canRoll = playing && !Game.busy && !Game.paused && s.turn.awaiting === 'roll' && !isAuto(seat);
+  const canRoll = playing && !Game.busy && !Game.paused && s.turn.awaiting === 'roll' && canControl(seat);
   btn.disabled = !canRoll;
   if (Game.die) Game.die.el.style.setProperty('--c', seat ? `var(--${seat.color})` : '#e2e8f0');
   const hint = $('#die-hint');
   if (!playing) hint.textContent = s.phase === 'finished' ? 'Fim de jogo' : '';
   else if (canRoll) hint.innerHTML = '<strong class="text-white">Toque no dado</strong><br><span class="text-xs text-slate-400">ou aperte Espaço</span>';
-  else if (!isAuto(seat) && s.turn.awaiting === 'move' && !Game.busy) hint.innerHTML = '<strong class="text-white">Escolha um peão</strong><br><span class="text-xs text-slate-400">clique nele ou use as teclas 1–4</span>';
+  else if (canControl(seat) && s.turn.awaiting === 'move' && !Game.busy) hint.innerHTML = '<strong class="text-white">Escolha um peão</strong><br><span class="text-xs text-slate-400">clique nele ou use as teclas 1–4</span>';
   else hint.textContent = `Vez de ${seat.name}`;
 }
 
@@ -1657,9 +1705,10 @@ function tickTimer() {
   const s = Game.state;
   const wrap = $('#timer-wrap');
   if (s && s.turn && s.turn.deadline && !Game.paused && !$('#screen-game').hidden) {
-    const left = Math.max(0, s.turn.deadline - Date.now());
+    const now = Date.now() + (Net.role === 'client' ? Net.offset : 0);
+    const left = Math.max(0, s.turn.deadline - now);
     wrap.hidden = false;
-    $('#timer-fill').style.width = `${(left / Game.turnMs) * 100}%`;
+    $('#timer-fill').style.width = `${Math.min(100, (left / (s.turn.turnMs || Game.turnMs)) * 100)}%`;
     $('#timer-text').textContent = `${Math.ceil(left / 1000)}s para jogar`;
   } else {
     wrap.hidden = true;
@@ -1725,9 +1774,12 @@ function confirmExit() {
   const s = Game.state;
   let close;
   const finished = !s || s.phase === 'finished';
+  let text = finished ? 'A partida terminou.' : 'A partida fica salva e você pode continuar depois.';
+  if (Net.role === 'host') text = 'A sala será encerrada para todos os jogadores.';
+  if (Net.role === 'client') text = 'Você sai da sala. Seus peões passam a ser jogados pelo robô.';
   close = openModal(h('div', {},
     h('h2', { class: 'text-xl font-black mb-2', text: 'Sair para o menu?' }),
-    h('p', { class: 'text-slate-300 text-sm mb-4', text: finished ? 'A partida terminou.' : 'A partida fica salva e você pode continuar depois.' }),
+    h('p', { class: 'text-slate-300 text-sm mb-4', text }),
     h('div', { class: 'grid grid-cols-2 gap-2' },
       h('button', { class: 'btn btn-ghost', onclick: () => close() }, 'Ficar'),
       h('button', { class: 'btn btn-primary', onclick: () => { close(); leaveGame(); } }, 'Sair'))));
@@ -1735,7 +1787,8 @@ function confirmExit() {
 
 function leaveGame() {
   clearTimers();
-  if (Game.state && Game.state.phase !== 'finished') {
+  if (Net.role) netLeave();
+  else if (Game.state && Game.state.phase !== 'finished') {
     Game.paused = false;
     save();
   }
@@ -1762,8 +1815,10 @@ function showHumansDone() {
 
 function showResults() {
   const s = Game.state;
+  if (Game.resultsShown) return;
+  Game.resultsShown = true;
   clearTimers();
-  save();
+  if (Net.role !== 'client') save();
   const medals = ['🥇', '🥈', '🥉', '4º'];
   const winner = s.seats[s.ranking[0]];
   if (!winner.isBot) { Sound.play('win'); celebrate(true); }
@@ -1778,18 +1833,757 @@ function showResults() {
         avatarEl(seat.avatar, seat.color),
         h('span', { class: 'font-semibold flex-1 truncate', text: seatLabel(seat) + (seat.isBot ? ' 🤖' : '') }));
     })),
-    h('div', { class: 'grid grid-cols-2 gap-2 mt-5' },
-      h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-house' }), 'Menu'),
-      h('button', { class: 'btn btn-primary', onclick: () => { close(); startNewGame(s.config); } }, h('i', { class: 'fa-solid fa-rotate-right' }), 'Revanche'))),
+    Net.role === 'client'
+      ? h('div', { class: 'mt-5 flex flex-col gap-2' },
+        h('p', { class: 'text-center text-sm text-slate-400', text: 'Aguardando o anfitrião para a revanche…' }),
+        h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-door-open' }), 'Sair da sala'))
+      : h('div', { class: 'grid grid-cols-2 gap-2 mt-5' },
+        h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-house' }), 'Menu'),
+        h('button', { class: 'btn btn-primary', onclick: () => { close(); if (Net.role === 'host') hostBackToLobby(); else startNewGame(s.config); } }, h('i', { class: 'fa-solid fa-rotate-right' }), 'Revanche'))),
   { dismissable: false });
+}
+
+/* =========================================================
+   Rede (PeerJS) — o anfitrião é a única autoridade
+   ========================================================= */
+const PEERJS_URL = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+const QRCODE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+const PEER_PREFIX = 'ludosupreme-';
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  // TURN opcional, para redes móveis/NAT restritivo:
+  // { urls: 'turn:SEU_SERVIDOR:3478', username: 'usuario', credential: 'senha' },
+];
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const JOIN_ORDER = ['red', 'yellow', 'green', 'blue'];
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error('Falha ao carregar ' + src));
+    document.head.append(el);
+  });
+}
+const randomId = (n = 16) => [...crypto.getRandomValues(new Uint8Array(n))].map(x => x.toString(16).padStart(2, '0')).join('');
+const randomCode = () => [...crypto.getRandomValues(new Uint8Array(4))].map(x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('');
+function safeAvatar(a) {
+  if (typeof a !== 'string') return '🙂';
+  if (a.startsWith('data:image/jpeg;base64,') && a.length < 40000) return a;
+  if (!a.startsWith('data:') && a.length <= 16) return a;
+  return '🙂';
+}
+function setRoomUrl(code) {
+  try { const u = new URL(location.href); u.searchParams.set('room', code); history.replaceState(null, '', u); } catch { /* ignore */ }
+}
+function clearRoomUrl() {
+  try { const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u); } catch { /* ignore */ }
+}
+function roomLink(code) {
+  const u = new URL(location.href);
+  u.search = '';
+  u.hash = '';
+  u.searchParams.set('room', code);
+  return u.toString();
+}
+
+const Net = {
+  role: null, peer: null, code: null, myId: null, myToken: null, spectator: false,
+  lobby: null, conns: new Map(), conn: null, connected: false, everConnected: false,
+  pending: false, pendingTimer: null, offset: 0, lastPong: 0, hb: null,
+  reconnTimer: null, retry: 0, closing: false, chain: Promise.resolve(),
+
+  // ----- anfitrião -----
+  publicState() {
+    const s = Game.state;
+    const cfg = s.config || {};
+    return {
+      ...s,
+      config: { mode: cfg.mode, timer: cfg.timer, speed: cfg.speed },
+      seats: s.seats.map(seat => ({ ...seat, avatar: null })), // avatares vão só no LOBBY
+    };
+  },
+  publicLobby() {
+    return { ...this.lobby, members: this.lobby.members.map(({ token, ...m }) => m) };
+  },
+  broadcast(msg) { for (const conn of this.conns.keys()) sendTo(conn, msg); },
+  broadcastState() {
+    if (this.role !== 'host' || !Game.state || this.lobby.phase !== 'game') return;
+    this.broadcast({ type: 'STATE', payload: { state: this.publicState() } });
+  },
+  broadcastAction(events) {
+    if (this.role !== 'host') return;
+    this.broadcast({ type: 'ACTION', payload: { events, state: this.publicState() } });
+  },
+  saveHost() {
+    if (this.role !== 'host' || !this.lobby) return;
+    const inGame = this.lobby.phase === 'game' && Game.state && Game.state.phase !== 'finished';
+    Store.set('ludo:host:' + this.code, { lobby: this.lobby, state: inGame ? Game.state : null, savedAt: Date.now() });
+    Store.set('ludo:lastHost', this.code);
+  },
+
+  // ----- convidado -----
+  send(msg) { try { if (this.conn && this.conn.open) this.conn.send(msg); } catch { /* conexão caiu */ } },
+  request(type, payload) {
+    this.send({ type, v: Game.state.stateVersion, payload });
+    this.pending = true;
+    clearTimeout(this.pendingTimer);
+    this.pendingTimer = setTimeout(() => {
+      if (!this.pending) return;
+      this.pending = false;
+      this.send({ type: 'SYNC_REQUEST' });
+      render();
+    }, 5000);
+    render();
+  },
+};
+const sendTo = (conn, msg) => { try { if (conn.open) conn.send(msg); } catch { /* conexão caiu */ } };
+
+function netReset() {
+  Net.closing = false;
+  Net.role = null;
+  Net.peer = null;
+  Net.conn = null;
+  Net.conns = new Map();
+  Net.connected = false;
+  Net.everConnected = false;
+  Net.pending = false;
+  Net.spectator = false;
+  Net.retry = 0;
+  Net.offset = 0;
+  Net.chain = Promise.resolve();
+}
+
+function netShutdown() {
+  Net.closing = true;
+  clearInterval(Net.hb);
+  clearTimeout(Net.reconnTimer);
+  const peer = Net.peer;
+  setTimeout(() => { try { peer && peer.destroy(); } catch { /* ignore */ } }, 400);
+  Net.role = null;
+  Net.conn = null;
+  Net.conns = new Map();
+  Net.connected = false;
+  $('#net-banner').hidden = true;
+}
+
+function netLeave() {
+  if (Net.role === 'host') {
+    Net.broadcast({ type: 'ROOM_CLOSED' });
+    Store.del('ludo:host:' + Net.code);
+    Store.del('ludo:lastHost');
+  } else if (Net.role === 'client') {
+    Net.send({ type: 'LEAVE' });
+    Store.del('ludo:session:' + Net.code);
+  }
+  netShutdown();
+  clearRoomUrl();
+}
+
+let connectingClose = null;
+function showConnecting(text) {
+  hideConnecting();
+  connectingClose = openModal(h('div', { class: 'text-center py-2' },
+    h('div', { class: 'spinner mb-4' }),
+    h('p', { class: 'font-semibold mb-4', text }),
+    h('button', { class: 'btn btn-ghost', onclick: () => { hideConnecting(); netLeave(); Game.state = null; showScreen('home'); } }, 'Cancelar')),
+  { dismissable: false });
+}
+function hideConnecting() { if (connectingClose) { connectingClose(); connectingClose = null; } }
+
+function netFail(err) {
+  hideConnecting();
+  netShutdown();
+  clearRoomUrl();
+  const type = err && err.type;
+  let msg = 'Não foi possível conectar.';
+  if (type === 'browser-incompatible') msg = 'Este navegador não suporta salas online.';
+  else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(type)) msg = 'Sem conexão com o servidor de salas.';
+  else if (type === 'peer-unavailable') msg = 'Sala não encontrada. Confira o código.';
+  else if (type === 'unavailable-id') msg = 'Não foi possível reabrir a sala agora. Tente de novo em instantes.';
+  else if (err && /carregar/.test(err.message || '')) msg = 'Não foi possível carregar a biblioteca de rede.';
+  Game.state = null;
+  showScreen('home');
+  let close;
+  close = openModal(h('div', { class: 'text-center' },
+    h('div', { class: 'text-4xl mb-2', text: '📡' }),
+    h('h2', { class: 'text-xl font-black mb-2', text: 'Problema de conexão' }),
+    h('p', { class: 'text-slate-300 text-sm mb-4', text: msg }),
+    h('div', { class: 'grid grid-cols-2 gap-2' },
+      h('button', { class: 'btn btn-ghost', onclick: () => close() }, 'Fechar'),
+      h('button', { class: 'btn btn-primary', onclick: () => { close(); renderSoloSetup(); showScreen('setup'); } }, 'Jogar Sozinho'))));
+}
+
+// ---------- Anfitrião ----------
+async function hostRoom(restore) {
+  try { if (!window.Peer) await loadScript(PEERJS_URL); } catch (e) { netFail(e); return; }
+  if (Net.role) netShutdown();
+  netReset();
+  Net.role = 'host';
+  let code = restore ? restore.lobby.code : randomCode();
+  showConnecting(restore ? 'Reabrindo a sala…' : 'Criando sala…');
+
+  const open = () => new Promise((resolve, reject) => {
+    let peer;
+    try { peer = new Peer(PEER_PREFIX + code, { config: { iceServers: ICE_SERVERS } }); } catch (e) { reject(e); return; }
+    let opened = false;
+    peer.on('open', () => { opened = true; resolve(peer); });
+    peer.on('error', err => {
+      if (!opened) { try { peer.destroy(); } catch { /* ignore */ } reject(err); return; }
+      if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(err.type)) toast('Instabilidade na rede…');
+    });
+  });
+  for (let attempt = 0; ; attempt++) {
+    try { Net.peer = await open(); break; } catch (err) {
+      if (Net.closing) return;
+      if (err && err.type === 'unavailable-id') {
+        if (!restore && attempt < 5) { code = randomCode(); continue; }
+        if (restore && attempt < 10) { await wait(3000); continue; } // o servidor ainda segura o ID antigo
+      }
+      netFail(err);
+      return;
+    }
+  }
+  if (Net.closing) return;
+  hideConnecting();
+  Net.code = code;
+  Net.peer.on('connection', hostAccept);
+  Net.peer.on('disconnected', () => { if (!Net.closing) { try { Net.peer.reconnect(); } catch { /* ignore */ } } });
+
+  if (restore) {
+    Net.lobby = restore.lobby;
+    Net.lobby.members.forEach(m => { if (!m.isBot && !m.isHost) m.connected = false; });
+    const me = Net.lobby.members.find(m => m.isHost);
+    Net.myId = me.id;
+  } else {
+    const me = {
+      id: randomId(8), token: randomId(), name: cleanName(profile.name) || 'Anfitrião', avatar: profile.avatar,
+      color: 'red', ready: true, isHost: true, isBot: false, connected: true,
+    };
+    Net.myId = me.id;
+    Net.lobby = {
+      code, phase: 'lobby', members: [me],
+      rules: Object.assign(defaultRuleToggles(), Store.get('ludo:onlineRules', {})),
+      time: Object.assign({ timer: true, seconds: 20 }, Store.get('ludo:onlineTime', {})),
+    };
+  }
+  setRoomUrl(code);
+  clearInterval(Net.hb);
+  Net.hb = setInterval(hostHeartbeat, 5000);
+
+  if (restore && restore.state && Net.lobby.phase === 'game') {
+    restore.state.seats.forEach(s => { if (!s.isBot && s.owner !== Net.myId) s.connected = false; });
+    resumeGame({ state: restore.state });
+  } else {
+    Net.lobby.phase = 'lobby';
+    showScreen('lobby');
+    renderLobby();
+  }
+  Net.saveHost();
+}
+
+function hostAccept(conn) {
+  conn.on('data', msg => { try { hostHandle(conn, msg); } catch (e) { console.error(e); } });
+  conn.on('close', () => hostDrop(conn));
+  conn.on('error', () => hostDrop(conn));
+}
+
+function hostHeartbeat() {
+  const now = Date.now();
+  for (const [conn, info] of Net.conns) if (now - info.lastSeen > 20000) hostDrop(conn);
+}
+
+function lobbyChanged() {
+  Net.broadcast({ type: 'LOBBY', payload: { lobby: Net.publicLobby() } });
+  if (!$('#screen-lobby').hidden) renderLobby();
+  Net.saveHost();
+}
+
+function hostHandle(conn, msg) {
+  if (!msg || typeof msg.type !== 'string') return;
+  const info = Net.conns.get(conn);
+  if (info) info.lastSeen = Date.now();
+  const p = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+  if (msg.type === 'PING') { sendTo(conn, { type: 'PONG', payload: { t: p.t, hostTime: Date.now() } }); return; }
+  if (msg.type === 'JOIN' || msg.type === 'REJOIN') { hostJoin(conn, msg.type, p); return; }
+  if (!info) return;
+  const L = Net.lobby;
+  const member = info.memberId ? L.members.find(m => m.id === info.memberId) : null;
+  switch (msg.type) {
+    case 'SYNC_REQUEST':
+      sendTo(conn, { type: 'LOBBY', payload: { lobby: Net.publicLobby() } });
+      if (Game.state && L.phase === 'game') sendTo(conn, { type: 'STATE', payload: { state: Net.publicState() } });
+      break;
+    case 'READY':
+      if (member && L.phase === 'lobby') { member.ready = !!p.ready; lobbyChanged(); }
+      break;
+    case 'PICK_COLOR':
+      if (member && L.phase === 'lobby' && E.COLORS.includes(p.color) && !L.members.some(m => m.color === p.color)) {
+        member.color = p.color;
+        lobbyChanged();
+      }
+      break;
+    case 'LEAVE':
+      hostDrop(conn, true);
+      break;
+    case 'ROLL_REQUEST':
+    case 'MOVE_REQUEST':
+      if (member) hostIntent(conn, member, msg);
+      break;
+  }
+}
+
+// Cor para quem chega: primeira livre (2 jogadores = Vermelho × Amarelo) ou o lugar de um robô.
+function pickSeatForNewcomer() {
+  const L = Net.lobby;
+  const free = JOIN_ORDER.find(c => !L.members.some(m => m.color === c));
+  if (free) return free;
+  const bot = L.members.find(m => m.isBot);
+  if (!bot) return null;
+  L.members = L.members.filter(m => m !== bot);
+  return bot.color;
+}
+
+function hostJoin(conn, type, p) {
+  const L = Net.lobby;
+  let member = type === 'REJOIN' && typeof p.token === 'string'
+    ? L.members.find(m => !m.isBot && !m.isHost && m.token === p.token) : null;
+  if (!member) {
+    const color = L.phase === 'lobby' ? pickSeatForNewcomer() : null;
+    if (!color) {
+      Net.conns.set(conn, { memberId: null, lastSeen: Date.now() });
+      sendTo(conn, { type: 'WELCOME', payload: { id: null, token: null, spectator: true, reason: L.phase === 'lobby' ? 'ROOM_FULL' : 'IN_PROGRESS' } });
+      sendTo(conn, { type: 'LOBBY', payload: { lobby: Net.publicLobby() } });
+      if (Game.state && L.phase === 'game') sendTo(conn, { type: 'STATE', payload: { state: Net.publicState() } });
+      return;
+    }
+    const humans = L.members.filter(m => !m.isBot).length;
+    member = {
+      id: randomId(8), token: randomId(), name: cleanName(String(p.name || '')) || `Jogador ${humans + 1}`,
+      avatar: safeAvatar(p.avatar), color, ready: false, isHost: false, isBot: false, connected: true,
+    };
+    L.members.push(member);
+  }
+  for (const [c, inf] of Net.conns) {
+    if (inf.memberId === member.id && c !== conn) { Net.conns.delete(c); try { c.close(); } catch { /* ignore */ } }
+  }
+  Net.conns.set(conn, { memberId: member.id, lastSeen: Date.now() });
+  member.connected = true;
+  sendTo(conn, { type: 'WELCOME', payload: { id: member.id, token: member.token, spectator: false } });
+  lobbyChanged();
+  if (Game.state && L.phase === 'game') {
+    const seat = Game.state.seats.find(s => s.owner === member.id);
+    if (seat && seat.connected === false) { seat.connected = true; toast(`${member.name} voltou`); }
+    if (!Game.busy) proceed();
+    else sendTo(conn, { type: 'STATE', payload: { state: Net.publicState() } });
+  }
+}
+
+function hostDrop(conn, leaving = false) {
+  const info = Net.conns.get(conn);
+  if (!info) return;
+  Net.conns.delete(conn);
+  try { conn.close(); } catch { /* ignore */ }
+  const L = Net.lobby;
+  const member = info.memberId ? L.members.find(m => m.id === info.memberId) : null;
+  if (!member || [...Net.conns.values()].some(i => i.memberId === member.id)) return;
+  if (L.phase === 'lobby') {
+    L.members = L.members.filter(m => m !== member);
+  } else {
+    member.connected = false;
+    const seat = Game.state && Game.state.seats.find(s => s.owner === member.id);
+    if (seat) {
+      seat.connected = false;
+      if (leaving) seat.afk = true;
+      toast(`${member.name} ${leaving ? 'saiu' : 'desconectou'} — o robô joga por ele até voltar`);
+      if (!Game.busy) proceed();
+    }
+  }
+  lobbyChanged();
+}
+
+async function hostIntent(conn, member, msg) {
+  const s = Game.state;
+  const reject = (reason) => {
+    sendTo(conn, { type: 'REJECT', payload: { reason } });
+    if (Game.state) sendTo(conn, { type: 'STATE', payload: { state: Net.publicState() } });
+  };
+  if (!s || s.phase !== 'playing') return reject('not-playing');
+  if (msg.v !== s.stateVersion) return reject('stale');
+  if (currentSeat().owner !== member.id) return reject('not-your-turn');
+  for (let k = 0; Game.busy && k < 200; k++) await wait(50); // espera a animação local terminar
+  if (Game.state !== s || Game.busy || msg.v !== s.stateVersion) return reject('stale');
+  const seat = currentSeat();
+  seat.afk = false;
+  seat.timeouts = 0;
+  if (msg.type === 'ROLL_REQUEST') {
+    if (s.turn.awaiting !== 'roll') return reject('stale');
+    actRoll('remote');
+  } else {
+    const i = Number(msg.payload && msg.payload.pieceId);
+    if (s.turn.awaiting !== 'move' || !s.turn.validMoves.includes(i)) return reject('invalid');
+    actMove(i, 'remote');
+  }
+}
+
+function hostStartGame() {
+  const L = Net.lobby;
+  const seated = L.members.filter(m => m.color);
+  if (seated.length < 2) { toast('São necessários pelo menos 2 jogadores.'); return; }
+  if (L.members.some(m => !m.isBot && !m.isHost && (!m.ready || !m.connected))) { toast('Aguarde todos ficarem prontos.'); return; }
+  const players = seated.map(m => m.isBot
+    ? { color: m.color, isBot: true, botLevel: m.botLevel }
+    : { color: m.color, name: m.name, avatar: m.avatar, isBot: false, owner: m.id });
+  nameBots(players);
+  L.phase = 'game';
+  lobbyChanged();
+  startNewGame({
+    mode: 'online', players, rules: toEngineRules(L.rules), speed: 'normal',
+    timer: { enabled: L.time.timer, seconds: L.time.seconds },
+  });
+}
+
+function hostBackToLobby() {
+  const L = Net.lobby;
+  clearTimers();
+  Game.state = null;
+  document.querySelectorAll('.modal-back').forEach(m => m.remove());
+  L.phase = 'lobby';
+  L.members = L.members.filter(m => m.isBot || m.isHost || m.connected);
+  L.members.forEach(m => { if (!m.isBot && !m.isHost) m.ready = false; });
+  showScreen('lobby');
+  lobbyChanged();
+}
+
+// ---------- Convidado ----------
+async function joinRoom(code) {
+  code = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  if (code.length !== 4) { toast('O código tem 4 caracteres.'); return; }
+  try { if (!window.Peer) await loadScript(PEERJS_URL); } catch (e) { netFail(e); return; }
+  if (Net.role) netShutdown();
+  netReset();
+  Net.role = 'client';
+  Net.code = code;
+  Net.myToken = (Store.get('ludo:session:' + code, null) || {}).token || null;
+  setRoomUrl(code);
+  showConnecting('Conectando à sala ' + code + '…');
+  clientConnect();
+  clearInterval(Net.hb);
+  Net.hb = setInterval(clientHeartbeat, 5000);
+}
+
+function clientConnect() {
+  if (Net.closing || Net.role !== 'client') return;
+  Net.reconnTimer = null;
+  try { Net.peer && Net.peer.destroy(); } catch { /* ignore */ }
+  let peer;
+  try { peer = new Peer({ config: { iceServers: ICE_SERVERS } }); } catch (e) { netFail(e); return; }
+  Net.peer = peer;
+  peer.on('open', () => {
+    if (Net.peer !== peer) return;
+    const conn = peer.connect(PEER_PREFIX + Net.code, { reliable: true, serialization: 'json' });
+    Net.conn = conn;
+    const timeout = setTimeout(() => { if (Net.conn === conn && !conn.open) clientLost(); }, 12000);
+    conn.on('open', () => {
+      clearTimeout(timeout);
+      Net.connected = true;
+      Net.lastPong = Date.now();
+      Net.retry = 0;
+      $('#net-banner').hidden = true;
+      const who = { name: cleanName(profile.name), avatar: profile.avatar };
+      Net.send(Net.myToken ? { type: 'REJOIN', payload: { token: Net.myToken, ...who } } : { type: 'JOIN', payload: who });
+      Net.send({ type: 'PING', payload: { t: Date.now() } });
+    });
+    conn.on('data', clientHandle);
+    conn.on('close', () => { if (Net.conn === conn) clientLost(); });
+    conn.on('error', () => { if (Net.conn === conn) clientLost(); });
+  });
+  peer.on('error', err => {
+    if (Net.peer !== peer) return;
+    if (!Net.everConnected && (err.type === 'peer-unavailable' || err.type === 'browser-incompatible')) { netFail(err); return; }
+    clientLost();
+  });
+}
+
+function clientLost() {
+  if (Net.closing || Net.role !== 'client' || Net.reconnTimer) return;
+  Net.connected = false;
+  Net.conn = null;
+  Net.pending = false;
+  if (Net.everConnected) {
+    $('#net-banner').hidden = false;
+    if (Game.state) render();
+  }
+  Net.retry++;
+  if (!Net.everConnected && Net.retry > 3) { netFail({ type: 'peer-unavailable' }); return; }
+  Net.reconnTimer = setTimeout(clientConnect, Math.min(1000 * Net.retry, 5000));
+}
+
+function clientHeartbeat() {
+  if (Net.role !== 'client' || !Net.connected) return;
+  if (Date.now() - Net.lastPong > 15000) { try { Net.conn && Net.conn.close(); } catch { /* ignore */ } clientLost(); return; }
+  Net.send({ type: 'PING', payload: { t: Date.now() } });
+}
+
+const enqueue = (fn) => { Net.chain = Net.chain.then(fn).catch(e => console.error(e)); };
+
+function clientHandle(msg) {
+  if (!msg || typeof msg.type !== 'string') return;
+  const p = msg.payload || {};
+  switch (msg.type) {
+    case 'WELCOME':
+      hideConnecting();
+      Net.everConnected = true;
+      Net.spectator = !!p.spectator;
+      Net.myId = p.id;
+      if (p.token) { Net.myToken = p.token; Store.set('ludo:session:' + Net.code, { token: p.token }); }
+      if (p.spectator) toast(p.reason === 'ROOM_FULL' ? 'Sala cheia — você está assistindo.' : 'Partida em andamento — você está assistindo.');
+      break;
+    case 'LOBBY':
+      Net.lobby = p.lobby;
+      enqueue(clientOnLobby);
+      break;
+    case 'STATE':
+      enqueue(() => clientApplyState(p.state));
+      break;
+    case 'ACTION':
+      enqueue(() => clientApplyAction(p.events, p.state));
+      break;
+    case 'REJECT':
+      Net.pending = false;
+      if (p.reason !== 'stale') toast('Jogada não permitida agora.');
+      if (Game.state) render();
+      break;
+    case 'PONG': {
+      const now = Date.now();
+      Net.lastPong = now;
+      Net.offset = p.hostTime + (now - p.t) / 2 - now;
+      break;
+    }
+    case 'ROOM_CLOSED':
+      netShutdown();
+      clearRoomUrl();
+      Store.del('ludo:session:' + Net.code);
+      Game.state = null;
+      clearTimers();
+      document.querySelectorAll('.modal-back').forEach(m => m.remove());
+      showScreen('home');
+      toast('O anfitrião encerrou a sala.');
+      break;
+  }
+}
+
+function injectAvatars(state) {
+  const members = (Net.lobby && Net.lobby.members) || [];
+  state.seats.forEach(seat => {
+    const m = members.find(x => x.id === seat.owner);
+    seat.avatar = seat.isBot ? BOT_AVATAR : (m ? m.avatar : '🙂');
+  });
+  return state;
+}
+
+function clientOnLobby() {
+  if (Net.lobby.phase === 'lobby') {
+    if (!$('#screen-game').hidden || Game.state) {
+      Game.state = null;
+      document.querySelectorAll('.modal-back').forEach(m => m.remove());
+    }
+    if ($('#screen-lobby').hidden) showScreen('lobby');
+    renderLobby();
+  }
+}
+
+function ensureGameView() {
+  const key = Game.state.seats.map(s => s.color + s.owner).join('|');
+  if ($('#screen-game').hidden || Game.viewKey !== key) {
+    const st = Game.state;
+    loadGame(st);
+    Game.viewKey = key;
+  }
+}
+
+function clientNotifyTurn() {
+  const s = Game.state;
+  if (s.phase !== 'playing') return;
+  const seat = currentSeat();
+  if (isLocalSeat(seat) && s.turn.awaiting === 'roll' && Game.announcedTurn !== s.turnNumber) {
+    Game.announcedTurn = s.turnNumber;
+    Sound.play('turn');
+  }
+}
+
+async function clientApplyState(state) {
+  if (!state) return;
+  Game.state = injectAvatars(state);
+  Net.pending = false;
+  ensureGameView();
+  render();
+  clientNotifyTurn();
+  if (state.phase === 'finished') showResults();
+}
+
+async function clientApplyAction(events, state) {
+  Game.state = injectAvatars(state);
+  Net.pending = false;
+  ensureGameView();
+  Game.busy = true;
+  await playEvents(events);
+  Game.busy = false;
+  Game.statusOverride = null;
+  render();
+  clientNotifyTurn();
+  if (state.phase === 'finished') showResults();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || Net.role !== 'client') return;
+  if (Net.connected) Net.send({ type: 'SYNC_REQUEST' });
+  else { clearTimeout(Net.reconnTimer); Net.reconnTimer = null; clientConnect(); }
+});
+
+// ---------- Telas: entrar e sala de espera ----------
+function openJoin(code) {
+  const root = $('#screen-setup');
+  root.innerHTML = '';
+  const codeInput = h('input', { type: 'text', maxlength: '4', placeholder: 'ABCD', 'aria-label': 'Código da sala', class: 'room-code text-center w-full uppercase', autocomplete: 'off' });
+  codeInput.value = code || '';
+  codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); });
+  const nameInput = h('input', { type: 'text', maxlength: '12', placeholder: 'Seu apelido', 'aria-label': 'Apelido', class: 'flex-1 min-w-0' });
+  nameInput.value = profile.name || '';
+  nameInput.addEventListener('input', () => { profile.name = nameInput.value.slice(0, 12); saveProfile(); });
+  const go = () => { profile.name = cleanName(nameInput.value); saveProfile(); joinRoom(codeInput.value); };
+  codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  root.append(h('div', { class: 'max-w-md mx-auto px-4 py-6 flex flex-col gap-4' },
+    setupHeader('Entrar em Sala'),
+    section('Código da sala', codeInput),
+    section('Você', h('div', { class: 'flex items-center gap-3' },
+      h('button', { class: 'shrink-0', 'aria-label': 'Trocar avatar', onclick: () => openAvatarPicker(() => openJoin(codeInput.value)) },
+        avatarEl(profile.avatar, null, '!w-14 !h-14 !text-3xl')),
+      nameInput)),
+    h('button', { class: 'btn btn-primary w-full text-lg py-4', onclick: go }, h('i', { class: 'fa-solid fa-right-to-bracket' }), 'Entrar'),
+  ));
+  showScreen('setup');
+  if (!code) codeInput.focus();
+}
+
+async function copyLink(link) {
+  try { await navigator.clipboard.writeText(link); toast('Link copiado!'); }
+  catch { toast(link); }
+}
+
+async function showQr(link) {
+  try { if (!window.QRCode) await loadScript(QRCODE_URL); } catch { toast('Não foi possível gerar o QR Code.'); return; }
+  const box = h('div', { class: 'bg-white p-3 rounded-xl mx-auto w-fit my-4' });
+  new window.QRCode(box, { text: link, width: 220, height: 220 });
+  let close;
+  close = openModal(h('div', { class: 'text-center' },
+    h('h2', { class: 'text-xl font-black', text: `Sala ${Net.code}` }),
+    h('p', { class: 'text-sm text-slate-400', text: 'Aponte a câmera do celular para entrar' }),
+    box,
+    h('button', { class: 'btn btn-ghost w-full', onclick: () => close() }, 'Fechar')));
+}
+
+function renderLobby() {
+  const L = Net.lobby;
+  if (!L) return;
+  const root = $('#screen-lobby');
+  root.innerHTML = '';
+  const isHost = Net.role === 'host';
+  const me = L.members.find(m => m.id === Net.myId);
+  const link = roomLink(L.code);
+
+  const seatCard = (color) => {
+    const m = L.members.find(x => x.color === color);
+    const style = `--c:var(--${color})`;
+    if (!m) {
+      const actions = [];
+      if (isHost) {
+        actions.push(h('button', { class: 'btn btn-ghost text-sm !min-h-[36px] !py-1', onclick: () => {
+          L.members.push({ id: 'bot-' + randomId(4), isBot: true, botLevel: 'medium', name: 'Robô', avatar: BOT_AVATAR, color, ready: true, connected: true });
+          lobbyChanged();
+        } }, '+ Robô'));
+      }
+      if (me && !Net.spectator) {
+        actions.push(h('button', { class: 'btn btn-ghost text-sm !min-h-[36px] !py-1', onclick: () => {
+          if (isHost) { me.color = color; lobbyChanged(); } else Net.send({ type: 'PICK_COLOR', payload: { color } });
+        } }, 'Sentar aqui'));
+      }
+      return h('div', { class: 'card !p-3 flex flex-col gap-2 border-dashed', style: `border-left:6px solid var(--${color})` },
+        h('div', { class: 'text-sm text-slate-400', text: `${CMETA[color].sym} ${CMETA[color].name} — livre` }),
+        h('div', { class: 'flex gap-2 flex-wrap' }, actions));
+    }
+    const status = m.isBot ? `🤖 ${LEVEL_NAME[m.botLevel]}` : m.isHost ? '👑 Anfitrião' : !m.connected ? '📡 offline' : m.ready ? '✅ Pronto' : '⏳ Aguardando';
+    const controls = [];
+    if (isHost && m.isBot) {
+      const sel = h('select', { class: 'bg-slate-900 rounded-md text-sm px-1 py-1', 'aria-label': 'Dificuldade do robô' },
+        LEVELS.map(([v, t]) => { const o = h('option', { value: v, text: t }); o.selected = v === m.botLevel; return o; }));
+      sel.addEventListener('change', () => { m.botLevel = sel.value; lobbyChanged(); });
+      controls.push(sel);
+    }
+    if (isHost && !m.isHost) {
+      controls.push(h('button', { class: 'icon-btn !w-9 !h-9', 'aria-label': `Remover ${m.name}`, onclick: () => {
+        L.members = L.members.filter(x => x !== m);
+        for (const [c, inf] of Net.conns) if (inf.memberId === m.id) { sendTo(c, { type: 'ROOM_CLOSED' }); Net.conns.delete(c); }
+        lobbyChanged();
+      } }, h('i', { class: 'fa-solid fa-xmark' })));
+    }
+    return h('div', { class: 'player-row card !p-3' + (m.id === Net.myId ? ' current' : ''), style },
+      avatarEl(m.isBot ? BOT_AVATAR : m.avatar, color),
+      h('div', { class: 'flex-1 min-w-0' },
+        h('div', { class: 'font-semibold truncate', text: `${CMETA[color].sym} ${m.isBot ? 'Robô ' + LEVEL_NAME[m.botLevel] : m.name}${m.id === Net.myId ? ' (você)' : ''}` }),
+        h('div', { class: 'text-xs text-slate-400', text: status })),
+      ...controls);
+  };
+
+  const seated = L.members.filter(m => m.color);
+  const waiting = L.members.filter(m => !m.isBot && !m.isHost && (!m.ready || !m.connected));
+  const canStart = seated.length >= 2 && !waiting.length;
+  let startHint = '';
+  if (seated.length < 2) startHint = 'Convide alguém ou adicione um robô.';
+  else if (waiting.length) startHint = `Aguardando: ${waiting.map(m => m.name).join(', ')}`;
+
+  const rulesBlock = isHost
+    ? [rulesPanel(L.rules, () => { Store.set('ludo:onlineRules', L.rules); lobbyChanged(); }),
+      section('Tempo', ...timerControls(L.time, () => { Store.set('ludo:onlineTime', L.time); lobbyChanged(); }))]
+    : [h('details', { class: 'card' },
+      h('summary', { class: 'cursor-pointer font-semibold', text: 'Regras da partida' }),
+      h('ul', { class: 'mt-2 text-sm text-slate-300 flex flex-col gap-1' },
+        RULE_DEFS.map(d => h('li', { text: `${L.rules[d.key] ? '✅' : '❌'} ${d.label}` })),
+        h('li', { text: `⏱️ ${L.time.timer ? L.time.seconds + 's por ação' : 'sem limite de tempo'}` })))];
+
+  root.append(h('div', { class: 'max-w-xl mx-auto px-4 py-6 flex flex-col gap-4' },
+    h('div', { class: 'flex items-center gap-3' },
+      h('button', { class: 'icon-btn', 'aria-label': 'Sair da sala', onclick: confirmExit }, h('i', { class: 'fa-solid fa-arrow-left' })),
+      h('h1', { class: 'text-2xl font-black flex-1', text: 'Sala de espera' })),
+    h('div', { class: 'card text-center flex flex-col gap-3' },
+      h('div', { class: 'text-xs uppercase tracking-wider text-slate-400', text: 'Código da sala' }),
+      h('div', { class: 'room-code', text: L.code }),
+      h('div', { class: 'flex gap-2 justify-center flex-wrap' },
+        h('button', { class: 'btn btn-ghost', onclick: () => copyLink(link) }, h('i', { class: 'fa-solid fa-link' }), 'Copiar link'),
+        h('button', { class: 'btn btn-ghost', onclick: () => showQr(link) }, h('i', { class: 'fa-solid fa-qrcode' }), 'QR Code'),
+        navigator.share ? h('button', { class: 'btn btn-ghost', onclick: () => navigator.share({ title: 'Ludo Supreme', text: `Vem jogar Ludo! Sala ${L.code}`, url: link }).catch(() => {}) },
+          h('i', { class: 'fa-solid fa-share-nodes' }), 'Enviar') : null)),
+    Net.spectator ? h('p', { class: 'text-center text-amber-300 text-sm', text: 'Você está assistindo esta sala.' }) : null,
+    h('div', { class: 'grid sm:grid-cols-2 gap-2' }, E.COLORS.map(seatCard)),
+    !isHost && me ? h('button', {
+      class: 'btn w-full text-lg py-4 ' + (me.ready ? 'btn-ghost' : 'btn-primary'),
+      onclick: () => Net.send({ type: 'READY', payload: { ready: !me.ready } }),
+    }, me.ready ? '✅ Pronto! (toque para cancelar)' : 'Estou pronto') : null,
+    ...rulesBlock,
+    isHost ? h('button', { class: 'btn btn-primary w-full text-lg py-4', disabled: !canStart, onclick: hostStartGame },
+      h('i', { class: 'fa-solid fa-dice' }), 'Iniciar partida') : h('p', { class: 'text-center text-sm text-slate-400', text: 'O anfitrião inicia a partida.' }),
+    startHint && isHost ? h('p', { class: 'text-center text-sm text-slate-400 -mt-2', text: startHint }) : null,
+  ));
 }
 
 /* ---------- Entradas globais ---------- */
 function clearAfkOnInteraction() {
   const s = Game.state;
-  if (!s || $('#screen-game').hidden) return;
+  if (!s || $('#screen-game').hidden || Net.role === 'client') return;
   let changed = false;
-  s.seats.forEach(seat => { if (!seat.isBot && seat.afk) { seat.afk = false; seat.timeouts = 0; changed = true; } });
+  s.seats.forEach(seat => { if (isLocalSeat(seat) && seat.afk) { seat.afk = false; seat.timeouts = 0; changed = true; } });
   if (changed) { toast('Bem-vindo de volta!'); if (!Game.busy) proceed(); }
 }
 
@@ -1814,7 +2608,18 @@ $('#btn-pause').addEventListener('click', togglePause);
 $('#btn-mute').setAttribute('data-mute', '');
 $('#btn-mute').addEventListener('click', () => Sound.toggle());
 
-renderHome();
+// Início: ?room=XXXX reabre a sala (anfitrião) ou abre a tela de entrada (convidado)
+(function boot() {
+  const room = (new URLSearchParams(location.search).get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  if (room.length === 4) {
+    const hostSave = Store.get('ludo:host:' + room, null);
+    if (hostSave) { hostRoom(hostSave); return; }
+    if (Store.get('ludo:session:' + room, null)) { joinRoom(room); return; }
+    openJoin(room);
+    return;
+  }
+  renderHome();
+})();
 requestAnimationFrame(tickTimer);
 </script>
 </body>
