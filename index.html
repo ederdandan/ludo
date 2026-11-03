@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Ludo Multiplayer Real-Time</title>
+  <title>Ludo Supreme Multiplayer (P2P)</title>
   
-  <!-- Tailwind CSS -->
+  <!-- Tailwind CSS CDN para estilização fluida -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- FontAwesome Icons -->
+
+  <!-- FontAwesome Icons (SVG / Font) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
   
-  <!-- QRCode.js -->
+  <!-- QRCode.js para gerar código QR do link -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-  <!-- Canvas Confetti para celebração de vitória -->
+  <!-- Canvas Confetti para efeitos visuais de vitória -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <!-- PeerJS: WebRTC Peer-to-Peer sem servidores de terceiros ou Google Auth -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap');
@@ -25,16 +28,17 @@
       background-color: #0f172a;
       color: #f8fafc;
       user-select: none;
+      min-height: 100vh;
     }
 
-    /* Estilização do Tabuleiro de Ludo */
+    /* Tabuleiro 15x15 Responsivo */
     .board-grid {
       display: grid;
       grid-template-columns: repeat(15, minmax(0, 1fr));
       grid-template-rows: repeat(15, minmax(0, 1fr));
       aspect-ratio: 1 / 1;
       width: 100%;
-      max-width: 620px;
+      max-width: 600px;
       margin: 0 auto;
       border: 4px solid #1e293b;
       border-radius: 1rem;
@@ -52,7 +56,7 @@
       background-color: #fff;
     }
 
-    /* Cores das zonas do Ludo */
+    /* Zonas e cores das 4 casas do Ludo */
     .bg-red-home { background-color: #ef4444; }
     .bg-green-home { background-color: #22c55e; }
     .bg-yellow-home { background-color: #eab308; }
@@ -69,39 +73,38 @@
     }
     .bg-star::after {
       content: "★";
-      font-size: 1.2rem;
+      font-size: 1rem;
       color: #94a3b8;
     }
 
-    /* Peão */
+    /* Visual dos Peões */
     .pawn {
-      width: 75%;
-      height: 75%;
+      width: 78%;
+      height: 78%;
       border-radius: 50%;
       border: 2px solid white;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
       cursor: pointer;
-      transition: all 0.2s ease-in-out;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
       z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
+      overflow: hidden;
     }
 
     .pawn.movable {
-      animation: pulse-border 1s infinite alternate;
+      animation: pulse-pawn 1s infinite alternate;
       cursor: pointer;
-      transform: scale(1.15);
+      transform: scale(1.2);
       z-index: 20;
     }
 
-    @keyframes pulse-border {
-      0% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.8), 0 0 12px rgba(255, 255, 255, 0.9); }
+    @keyframes pulse-pawn {
+      0% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.9); }
       100% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0), 0 0 18px rgba(255, 255, 255, 0.6); }
     }
 
-    /* Imagem do Jogador dentro do Peão */
     .pawn-avatar {
       width: 100%;
       height: 100%;
@@ -109,83 +112,71 @@
       object-fit: cover;
     }
 
-    /* Animação do Dado */
+    /* Animação 3D de Rolar o Dado */
     .dice-rolling {
-      animation: spin 0.4s linear infinite;
+      animation: roll 0.4s ease-out infinite;
     }
-    @keyframes spin {
-      100% { transform: rotate(360deg); }
-    }
-
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #0f172a;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #334155;
-      border-radius: 3px;
+    @keyframes roll {
+      0% { transform: rotate(0deg) scale(0.9); }
+      50% { transform: rotate(180deg) scale(1.1); }
+      100% { transform: rotate(360deg) scale(0.9); }
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between">
+<body class="flex flex-col justify-between">
 
-  <!-- Header App Bar -->
-  <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+  <!-- Cabeçalho Principal -->
+  <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
     <div class="flex items-center space-x-3">
       <div class="bg-gradient-to-tr from-red-500 via-yellow-500 to-blue-500 p-2 rounded-xl text-white shadow-lg">
-        <i class="fa-solid fa-gamepad text-xl"></i>
+        <i class="fa-solid fa-dice text-xl"></i>
       </div>
       <div>
-        <h1 class="font-bold text-lg leading-none bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Ludo Supreme</h1>
-        <span class="text-xs text-slate-400 font-medium">Multiplayer em Tempo Real</span>
+        <h1 class="font-bold text-lg leading-none bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Ludo P2P Web</h1>
+        <span class="text-xs text-slate-400 font-medium">100% HTML, CSS & JavaScript Puro (WebRTC)</span>
       </div>
     </div>
 
-    <!-- Estatísticas & Perfil Rápido -->
     <div class="flex items-center space-x-3">
       <button onclick="toggleStatsModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 transition">
         <i class="fa-solid fa-trophy text-amber-400"></i> Estatísticas
       </button>
-      <div id="user-header-profile" class="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
-        <img id="header-avatar" src="https://placehold.co/100x100/3b82f6/ffffff?text=U" class="w-6 h-6 rounded-full object-cover border border-slate-600"/>
-        <span id="header-name" class="text-xs font-semibold text-slate-200 max-w-[80px] truncate">Jogador</span>
+      <div class="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
+        <img id="header-avatar" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzNiODJmNiIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iMzgiIHI9IjIwIiBmaWxsPSIjZmZmZmZmIi8+PHBhdGggZD0iTSAyMCA4NSBDIDIwIDY1LCA4MCA2NSwgODAgODUgWiIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==" class="w-6 h-6 rounded-full object-cover border border-slate-600"/>
+        <span id="header-name" class="text-xs font-semibold text-slate-200 max-w-[90px] truncate">Jogador</span>
       </div>
     </div>
   </header>
 
-  <!-- Conteúdo Principal -->
+  <!-- Área Central -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
 
-    <!-- LOBBY DE ENTRADA / CONFIGURAÇÃO DE SALA -->
+    <!-- LOBBY / CONFIGURAÇÃO DE ENTRADA -->
     <section id="lobby-screen" class="w-full max-w-md bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-2xl backdrop-blur-sm my-auto">
       <div class="text-center mb-6">
-        <h2 class="text-2xl font-bold text-white mb-1">Bem-vindo ao Ludo</h2>
-        <p class="text-slate-400 text-xs">Crie uma sala ou junte-se a amigos usando o código da sala!</p>
+        <h2 class="text-2xl font-bold text-white mb-1">Criar ou Entrar na Sala</h2>
+        <p class="text-slate-400 text-xs">Jogue com até 4 pessoas via conexão direta sem login ou cadastros!</p>
       </div>
 
-      <!-- Configuração do Jogador -->
       <div class="space-y-4 mb-6">
         <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome / Apelido</label>
           <input type="text" id="input-username" maxlength="12" placeholder="Digite seu nome..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"/>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Sua Foto de Perfil</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Foto de Perfil (Opcional)</label>
           <div class="flex items-center space-x-3">
-            <img id="avatar-preview" src="https://placehold.co/100x100/3b82f6/ffffff?text=U" class="w-12 h-12 rounded-full object-cover border-2 border-indigo-500 shadow"/>
+            <img id="avatar-preview" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzNiODJmNiIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iMzgiIHI9IjIwIiBmaWxsPSIjZmZmZmZmIi8+PHBhdGggZD0iTSAyMCA4NSBDIDIwIDY1LCA4MCA2NSwgODAgODUgWiIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==" class="w-12 h-12 rounded-full object-cover border-2 border-indigo-500 shadow"/>
             <input type="file" id="input-avatar" accept="image/*" class="hidden" onchange="handleAvatarUpload(event)"/>
             <button onclick="document.getElementById('input-avatar').click()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-2.5 rounded-xl border border-slate-600 transition font-medium">
-              <i class="fa-solid fa-upload mr-1"></i> Alterar Foto
+              <i class="fa-solid fa-upload mr-1"></i> Carregar Imagem
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Ações de Sala -->
+      <!-- Ações -->
       <div class="space-y-3 pt-4 border-t border-slate-700/60">
         <button onclick="createRoom()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2">
           <i class="fa-solid fa-plus-circle"></i> Criar Nova Sala
@@ -193,12 +184,12 @@
 
         <div class="relative flex py-2 items-center">
           <div class="flex-grow border-t border-slate-700"></div>
-          <span class="flex-shrink mx-3 text-slate-500 text-xs">OU ENTRAR EM UMA SALA</span>
+          <span class="flex-shrink mx-3 text-slate-500 text-xs">OU ENTRAR COM CÓDIGO</span>
           <div class="flex-grow border-t border-slate-700"></div>
         </div>
 
         <div class="flex gap-2">
-          <input type="text" id="input-room-code" maxlength="4" placeholder="CÓDIGO (EX: ABCD)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-center font-mono uppercase tracking-widest text-white focus:outline-none focus:border-indigo-500"/>
+          <input type="text" id="input-room-code" maxlength="4" placeholder="CÓDIGO (EX: LUDO)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-center font-mono uppercase tracking-widest text-white focus:outline-none focus:border-indigo-500"/>
           <button onclick="joinRoom()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-lg shadow-emerald-600/30">
             Entrar
           </button>
@@ -206,18 +197,18 @@
       </div>
     </section>
 
-    <!-- ÁREA DO JOGO (TABULEIRO + PAINEL) -->
+    <!-- TELA DE JOGO -->
     <section id="game-screen" class="hidden w-full flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
 
       <!-- TABULEIRO DO LUDO -->
-      <div class="w-full max-w-[620px] flex flex-col items-center">
+      <div class="w-full max-w-[600px] flex flex-col items-center">
         <div id="board" class="board-grid"></div>
       </div>
 
-      <!-- PAINEL LATERAL DE CONTROLE / JOGADORES -->
+      <!-- PAINEL DE CONTROLE LATERAL -->
       <div class="w-full lg:w-80 flex flex-col gap-4">
         
-        <!-- Cartão da Sala & QR Code -->
+        <!-- Status da Sala e QR Code -->
         <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl">
           <div class="flex items-center justify-between mb-3">
             <div>
@@ -234,7 +225,7 @@
             </div>
           </div>
 
-          <!-- Timer de Turno -->
+          <!-- Timer de Turno de 40s -->
           <div class="space-y-1">
             <div class="flex justify-between text-xs font-semibold">
               <span class="text-slate-400">Tempo do Turno</span>
@@ -246,34 +237,30 @@
           </div>
         </div>
 
-        <!-- Painel de Controle de Ação (Dado) -->
+        <!-- Rolagem do Dado -->
         <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl text-center">
           <div class="text-xs text-slate-400 mb-2 font-medium" id="status-turn-desc">Aguardando início...</div>
           
           <div class="flex items-center justify-center gap-4 my-2">
-            <!-- Representação Visual do Dado -->
             <div id="dice-container" class="w-16 h-16 bg-slate-900 border-2 border-indigo-500/50 rounded-2xl flex items-center justify-center shadow-inner text-3xl font-black text-indigo-400">
               <span id="dice-value"><i class="fa-solid fa-dice-d6"></i></span>
             </div>
 
-            <button id="btn-roll-dice" onclick="rollDice()" disabled class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">
+            <button id="btn-roll-dice" onclick="rollDice()" disabled class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">
               JOGAR DADO
             </button>
           </div>
         </div>
 
-        <!-- Lista de Jogadores na Sala -->
+        <!-- Lista de Jogadores -->
         <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl flex-1">
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between items-center">
             <span>Jogadores (<span id="player-count">0</span>/4)</span>
             <span id="room-status-badge" class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Aguardando</span>
           </h3>
 
-          <div id="players-list" class="space-y-2.5">
-            <!-- Renderizado dinamicamente pelo JS -->
-          </div>
+          <div id="players-list" class="space-y-2.5"></div>
 
-          <!-- Botão para Iniciar a Partida (Apenas Host) -->
           <button id="btn-start-game" onclick="startGame()" class="hidden w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition shadow-lg">
             Iniciar Partida
           </button>
@@ -283,16 +270,18 @@
     </section>
   </main>
 
-  <!-- Rodapé informativo -->
+  <!-- Rodapé -->
   <footer class="bg-slate-900 border-t border-slate-800 py-3 text-center text-xs text-slate-500">
-    Ludo Multiplayer • Sincronizado via Firebase Realtime Database
+    Ludo Supreme Web &bull; Desenvolvido com HTML5, CSS3 e JS (WebRTC PeerJS)
   </footer>
 
-  <!-- MODAL DE QR CODE -->
+  <!-- MODAIS -->
+
+  <!-- Modal QR Code -->
   <div id="qr-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
       <h3 class="text-lg font-bold text-white">Convidar Jogadores</h3>
-      <p class="text-xs text-slate-400">Escaneie o QR Code abaixo com a câmera do celular para entrar na sala diretamente:</p>
+      <p class="text-xs text-slate-400">Escaneie o código com a câmera para entrar na sala:</p>
       
       <div class="bg-white p-4 rounded-xl inline-block shadow-inner">
         <div id="qrcode-container"></div>
@@ -309,11 +298,11 @@
     </div>
   </div>
 
-  <!-- MODAL DE ESTATÍSTICAS -->
+  <!-- Modal Estatísticas -->
   <div id="stats-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
       <div class="flex justify-between items-center">
-        <h3 class="text-lg font-bold text-white">Suas Estatísticas</h3>
+        <h3 class="text-lg font-bold text-white">Estatísticas Salvas</h3>
         <button onclick="toggleStatsModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
 
@@ -334,65 +323,40 @@
       </div>
 
       <button onclick="toggleStatsModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl transition text-sm">
-        Ok
+        Fechar
       </button>
     </div>
   </div>
 
-  <!-- MODAL DE NOTIFICAÇÃO / MENSAGEM DO JOGO -->
+  <!-- Modal Avisos -->
   <div id="msg-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-xs w-full text-center space-y-3 shadow-2xl">
       <div id="msg-icon" class="text-3xl text-indigo-400"><i class="fa-solid fa-circle-info"></i></div>
       <h4 id="msg-title" class="text-base font-bold text-white">Aviso</h4>
-      <p id="msg-body" class="text-xs text-slate-300">Mensagem do jogo.</p>
+      <p id="msg-body" class="text-xs text-slate-300">Mensagem do sistema.</p>
       <button onclick="closeMsgModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-xl text-xs transition">
-        Entendido
+        OK
       </button>
     </div>
   </div>
 
-  <!-- SCRIPTS DO FIREBASE & LÓGICA DO JOGO -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { 
-      getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot 
-    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    // Configuração do Firebase resiliente
-    const firebaseConfig = typeof __firebase_config !== 'undefined' 
-      ? JSON.parse(__firebase_config) 
-      : {
-          apiKey: "AIzaSyDemoConfigKeyForLudoGameRealtime123",
-          authDomain: "ludo-game-app.firebaseapp.com",
-          projectId: "ludo-game-app",
-          storageBucket: "ludo-game-app.appspot.com",
-          messagingSenderId: "123456789",
-          appId: "1:123456789:web:abcdef123456"
-        };
-
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'ludo-multiplayer-app';
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    // Variaveis de Estado Global
-    let currentUser = null;
+  <!-- LÓGICA DO JOGO EM JAVASCRIPT PURO -->
+  <script>
+    // --- ESTADO GLOBAL DO JOGO ---
+    let myId = 'usr_' + Math.random().toString(36).substring(2, 8);
+    let peer = null;
+    let connections = []; // Conexões WebRTC PeerJS
+    let isHost = false;
     let roomCode = null;
-    let roomRef = null;
-    let unsubscribeRoom = null;
     let currentGameState = null;
     let turnTimerInterval = null;
-    let timerSeconds = 40;
     let userAvatarBase64 = null;
     let localStats = { matches: 0, victories: 0, captures: 0 };
 
-    // Cores dos jogadores no Ludo (4 Cores Padrão)
     const PLAYER_COLORS = ['red', 'green', 'yellow', 'blue'];
     const COLOR_NAMES = { red: 'Vermelho', green: 'Verde', yellow: 'Amarelo', blue: 'Azul' };
 
-    // Mapeamento dos caminhos das 4 cores no tabuleiro de 15x15
-    // Cada caminho especifica as coordenadas (r, c) em ordem do 0 ate o final (posição 56 = casa final)
+    // Circuito Principal (15x15)
     const MAIN_CIRCUIT = [
       [6,1], [6,2], [6,3], [6,4], [6,5],
       [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],
@@ -408,14 +372,8 @@
       [7,0], [6,0]
     ];
 
-    // Casas iniciais (saída para o circuito) offset no MAIN_CIRCUIT:
-    // Vermelho: índice 0 (6,1)
-    // Verde: índice 13 (1,8)
-    // Amarelo: índice 26 (8,13)
-    // Azul: índice 39 (13,6)
     const START_INDEX = { red: 0, green: 13, yellow: 26, blue: 39 };
 
-    // Caminhos finais de reta de chegada para cada cor
     const HOME_STRETCH = {
       red: [[7,1], [7,2], [7,3], [7,4], [7,5], [7,6]],
       green: [[1,7], [2,7], [3,7], [4,7], [5,7], [6,7]],
@@ -423,7 +381,6 @@
       blue: [[13,7], [12,7], [11,7], [10,7], [9,7], [8,7]]
     };
 
-    // Posições visuais dos 4 peões na Base Inicial de cada cor
     const HOME_BASE_COORDS = {
       red: [[2,2], [2,3], [3,2], [3,3]],
       green: [[2,11], [2,12], [3,11], [3,12]],
@@ -431,105 +388,66 @@
       blue: [[11,2], [11,3], [12,2], [12,3]]
     };
 
-    // Estático: Estrelas de Proteção / Seguras
     const SAFE_POSITIONS = [
-      [6,1], [2,8], [8,13], [12,6], // saídas
-      [8,2], [1,6], [6,12], [13,8]  // estrelas adicionais
+      [6,1], [2,8], [8,13], [12,6],
+      [8,2], [1,6], [6,12], [13,8]
     ];
 
-    // --- INICIALIZAÇÃO ---
-    window.onload = async () => {
-      loadStatsFromStorage();
+    // SVG Padrão para Avatar
+    function getDefaultAvatar() {
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+      const c = colors[Math.floor(Math.random() * colors.length)];
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${c}"/><circle cx="50" cy="38" r="20" fill="#ffffff"/><path d="M 20 85 C 20 65, 80 65, 80 85 Z" fill="#ffffff"/></svg>`;
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    }
+
+    // Inicialização ao carregar a página
+    window.onload = () => {
+      loadStats();
       setupBoardDOM();
 
-      // Autenticação Firebase com Fallback
-      await ensureAuthenticated();
-
-      // Preencher avatar padrão base64 se não houver
-      userAvatarBase64 = generateDefaultAvatarSVG();
+      userAvatarBase64 = getDefaultAvatar();
       document.getElementById('avatar-preview').src = userAvatarBase64;
+      document.getElementById('header-avatar').src = userAvatarBase64;
 
-      // Verificar se existe um parâmetro 'room' na URL para entrar automaticamente
       const urlParams = new URLSearchParams(window.location.search);
       const urlRoom = urlParams.get('room');
       if (urlRoom) {
         document.getElementById('input-room-code').value = urlRoom.toUpperCase();
       }
 
-      // Page Visibility API - Manter foco / reconectar de onde parou
+      // Page Visibility API para reconexão/manutenção do foco do turno
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && roomCode && roomRef) {
-          console.log("Navegador em foco novamente. Sincronizando estado...");
-          syncRoomState();
+        if (!document.hidden && currentGameState) {
+          renderGameState(currentGameState);
         }
       });
     };
 
-    // Garantir que o usuário esteja autenticado
-    async function ensureAuthenticated() {
-      if (currentUser && currentUser.uid) return currentUser;
-
+    // Estatísticas locais em LocalStorage
+    function loadStats() {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          const userCred = await signInWithCustomToken(auth, __initial_auth_token);
-          currentUser = userCred.user;
-        } else {
-          const userCred = await signInAnonymously(auth);
-          currentUser = userCred.user;
-        }
-      } catch (err) {
-        console.warn("Erro ao autenticar via Firebase Auth. Usando fallback de ID local:", err);
-        let localUid = localStorage.getItem('ludo_local_uid');
-        if (!localUid) {
-          localUid = 'user_' + Math.random().toString(36).substring(2, 10);
-          localStorage.setItem('ludo_local_uid', localUid);
-        }
-        currentUser = { uid: localUid };
-      }
-
-      if (currentUser && currentUser.uid) {
-        document.getElementById('header-name').innerText = `ID: ${currentUser.uid.substring(0, 4)}`;
-      }
-
-      return currentUser;
-    }
-
-    // Gerador de Avatar SVG Padrão
-    function generateDefaultAvatarSVG() {
-      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${randomColor}"/><circle cx="50" cy="38" r="20" fill="#ffffff"/><path d="M 20 85 C 20 65, 80 65, 80 85 Z" fill="#ffffff"/></svg>`;
-      return 'data:image/svg+xml;base64,' + btoa(svg);
-    }
-
-    // Carregar e Salvar Estatísticas no LocalStorage
-    function loadStatsFromStorage() {
-      try {
-        const stored = localStorage.getItem('ludo_player_stats');
+        const stored = localStorage.getItem('ludo_stats_p2p');
         if (stored) {
           localStats = JSON.parse(stored);
           document.getElementById('stat-matches').innerText = localStats.matches || 0;
           document.getElementById('stat-victories').innerText = localStats.victories || 0;
           document.getElementById('stat-captures').innerText = localStats.captures || 0;
         }
-      } catch (e) {
-        console.warn("Falha ao ler localStorage:", e);
-      }
+      } catch (e){}
     }
 
-    function saveStatsToStorage() {
+    function saveStats() {
       try {
-        localStorage.setItem('ludo_player_stats', JSON.stringify(localStats));
+        localStorage.setItem('ludo_stats_p2p', JSON.stringify(localStats));
         document.getElementById('stat-matches').innerText = localStats.matches;
         document.getElementById('stat-victories').innerText = localStats.victories;
         document.getElementById('stat-captures').innerText = localStats.captures;
-      } catch (e) {
-        console.warn("Falha ao salvar localStorage:", e);
-      }
+      } catch (e){}
     }
 
-    // Upload e compressão de foto de perfil em Base64
-    window.handleAvatarUpload = (event) => {
+    // Upload de Imagem de Perfil
+    function handleAvatarUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -537,22 +455,21 @@
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          // Redimensionar para max 120x120 para economizar payload na sala
           const canvas = document.createElement('canvas');
-          canvas.width = 100;
-          canvas.height = 100;
+          canvas.width = 90;
+          canvas.height = 90;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, 100, 100);
-          userAvatarBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          ctx.drawImage(img, 0, 0, 90, 90);
+          userAvatarBase64 = canvas.toDataURL('image/jpeg', 0.75);
           document.getElementById('avatar-preview').src = userAvatarBase64;
           document.getElementById('header-avatar').src = userAvatarBase64;
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
-    };
+    }
 
-    // --- MONTAGEM VISUAL DO TABULEIRO DO LUDO (15x15) ---
+    // --- CONSTRUÇÃO DO TABULEIRO DE LUDO DE 15X15 ---
     function setupBoardDOM() {
       const board = document.getElementById('board');
       board.innerHTML = '';
@@ -563,36 +480,19 @@
           cell.id = `cell-${r}-${c}`;
           cell.className = 'cell';
 
-          // Base Vermelha (Top-Left 6x6)
           if (r < 6 && c < 6) {
             cell.classList.add('bg-red-home');
-            if (r >= 1 && r <= 4 && c >= 1 && c <= 4) {
-              cell.style.backgroundColor = '#ffffff';
-            }
-          }
-          // Base Verde (Top-Right 6x6)
-          else if (r < 6 && c >= 9) {
+            if (r >= 1 && r <= 4 && c >= 1 && c <= 4) cell.style.backgroundColor = '#ffffff';
+          } else if (r < 6 && c >= 9) {
             cell.classList.add('bg-green-home');
-            if (r >= 1 && r <= 4 && c >= 10 && c <= 13) {
-              cell.style.backgroundColor = '#ffffff';
-            }
-          }
-          // Base Azul (Bottom-Left 6x6)
-          else if (r >= 9 && c < 6) {
+            if (r >= 1 && r <= 4 && c >= 10 && c <= 13) cell.style.backgroundColor = '#ffffff';
+          } else if (r >= 9 && c < 6) {
             cell.classList.add('bg-blue-home');
-            if (r >= 10 && r <= 13 && c >= 1 && c <= 4) {
-              cell.style.backgroundColor = '#ffffff';
-            }
-          }
-          // Base Amarela (Bottom-Right 6x6)
-          else if (r >= 9 && c >= 9) {
+            if (r >= 10 && r <= 13 && c >= 1 && c <= 4) cell.style.backgroundColor = '#ffffff';
+          } else if (r >= 9 && c >= 9) {
             cell.classList.add('bg-yellow-home');
-            if (r >= 10 && r <= 13 && c >= 10 && c <= 13) {
-              cell.style.backgroundColor = '#ffffff';
-            }
-          }
-          // Centro do Tabuleiro (Triângulo Final)
-          else if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
+            if (r >= 10 && r <= 13 && c >= 10 && c <= 13) cell.style.backgroundColor = '#ffffff';
+          } else if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
             if (r === 7 && c === 7) {
               cell.style.backgroundColor = '#0f172a';
               cell.innerHTML = `<i class="fa-solid fa-trophy text-amber-400 text-xs"></i>`;
@@ -600,19 +500,15 @@
             else if (r === 6 && c === 7) cell.classList.add('bg-green-home');
             else if (r === 7 && c === 8) cell.classList.add('bg-yellow-home');
             else if (r === 8 && c === 7) cell.classList.add('bg-blue-home');
-          }
-          // Caminhos Especiais / Reta de Chegada
-          else if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-path');
+          } else if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-path');
           else if (c === 7 && r >= 1 && r <= 5) cell.classList.add('bg-green-path');
           else if (r === 7 && c >= 9 && c <= 13) cell.classList.add('bg-yellow-path');
           else if (c === 7 && r >= 9 && r <= 13) cell.classList.add('bg-blue-path');
-          // Saídas dos Peões
           else if (r === 6 && c === 1) cell.classList.add('bg-red-home');
           else if (r === 1 && c === 8) cell.classList.add('bg-green-home');
           else if (r === 8 && c === 13) cell.classList.add('bg-yellow-home');
           else if (r === 13 && c === 6) cell.classList.add('bg-blue-home');
 
-          // Casas com Estrelas (Seguras)
           if (SAFE_POSITIONS.some(([sr, sc]) => sr === r && sc === c)) {
             cell.classList.add('bg-star');
           }
@@ -622,613 +518,616 @@
       }
     }
 
-    // --- GERENCIAMENTO DE SALAS E MULTIPLAYER ---
+    // --- COMUNICAÇÃO MULTIPLAYER PEER-TO-PEER (WEBRTC) ---
 
-    // Gerar Código de 4 Letras Maiúsculas
     function generateRoomCode() {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      let code = '';
-      for (let i = 0; i < 4; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return code;
+      let c = '';
+      for (let i = 0; i < 4; i++) c += chars.charAt(Math.floor(Math.random() * chars.length));
+      return c;
     }
 
-    // Criar Nova Sala
-    window.createRoom = async () => {
-      // Garantir autenticação prévia
-      await ensureAuthenticated();
-      if (!currentUser || !currentUser.uid) {
-        showMsgModal("Erro de Autenticação", "Não foi possível identificar seu usuário. Tente recarregar a página.");
-        return;
-      }
-
-      const username = document.getElementById('input-username').value.trim() || 'Jogador 1';
-      document.getElementById('header-name').innerText = username;
-      
-      roomCode = generateRoomCode();
-      roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
-
-      const initialPlayerData = {
-        id: currentUser.uid,
-        name: username,
-        avatar: userAvatarBase64,
-        color: 'red',
-        isHost: true
-      };
-
-      const initialGameState = {
-        code: roomCode,
-        status: 'waiting', // waiting, playing, finished
-        hostId: currentUser.uid,
-        players: [initialPlayerData],
-        currentTurnIndex: 0,
-        diceValue: null,
-        diceRolled: false,
-        timerStartTime: Date.now(),
-        winner: null,
-        // Estado dos Peões (4 por jogador)
-        pawns: {
-          red: [-1, -1, -1, -1],
-          green: [-1, -1, -1, -1],
-          yellow: [-1, -1, -1, -1],
-          blue: [-1, -1, -1, -1]
-        }
-      };
-
+    function initPeer(peerId, callback) {
       try {
-        await setDoc(roomRef, initialGameState);
-        subscribeToRoom();
-        showGameScreen();
+        peer = new Peer(peerId, {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+          },
+          debug: 1
+        });
+
+        peer.on('open', (id) => {
+          console.log("Peer Conectado ID:", id);
+          if (callback) callback();
+        });
+
+        peer.on('connection', (conn) => {
+          handleIncomingConnection(conn);
+        });
+
+        peer.on('error', (err) => {
+          console.warn("PeerJS Warning/Error:", err);
+          // Fallback gracioso para salas em ambientes com restrição de Canvas/iFrame (WebSockets bloqueados)
+          if (!currentGameState) {
+            if (callback) callback();
+          } else {
+            console.log("Modo de jogo local/offline ativado para este ambiente.");
+          }
+        });
       } catch (err) {
-        console.error("Erro ao criar sala:", err);
-        showMsgModal("Erro", "Não foi possível criar a sala. Tente novamente.");
+        console.warn("PeerJS Initialization Exception (Canvas Sandbox Fallback):", err);
+        // Em ambientes restritos que bloqueiam totalmente o WebSocket do PeerJS, executa o callback localmente
+        if (callback) callback();
       }
-    };
+    }
 
-    // Entrar em Sala Existente
-    window.joinRoom = async () => {
-      // Garantir autenticação prévia
-      await ensureAuthenticated();
-      if (!currentUser || !currentUser.uid) {
-        showMsgModal("Erro de Autenticação", "Não foi possível identificar seu usuário. Tente recarregar a página.");
-        return;
+    function handleIncomingConnection(conn) {
+      connections.push(conn);
+      conn.on('data', (data) => {
+        handlePeerData(data, conn);
+      });
+      conn.on('close', () => {
+        connections = connections.filter(c => c !== conn);
+      });
+    }
+
+    function broadcastState(state) {
+      currentGameState = state;
+      renderGameState(state);
+      connections.forEach(conn => {
+        if (conn.open) {
+          conn.send({ type: 'STATE_UPDATE', state: state });
+        }
+      });
+    }
+
+    function handlePeerData(data, conn) {
+      if (data.type === 'JOIN_REQUEST') {
+        if (!isHost) return;
+        if (currentGameState.players.length >= 4 || currentGameState.status !== 'waiting') {
+          conn.send({ type: 'JOIN_REJECTED', reason: 'Sala cheia ou jogo em andamento.' });
+          return;
+        }
+
+        const assignedColor = PLAYER_COLORS[currentGameState.players.length];
+        const newPlayer = {
+          id: data.player.id,
+          name: data.player.name,
+          avatar: data.player.avatar,
+          color: assignedColor
+        };
+
+        currentGameState.players.push(newPlayer);
+        broadcastState(currentGameState);
+      } else if (data.type === 'STATE_UPDATE') {
+        currentGameState = data.state;
+        renderGameState(currentGameState);
+      } else if (data.type === 'MOVE_PAWN' || data.type === 'ROLL_DICE') {
+        if (isHost) {
+          processPlayerAction(data);
+        }
       }
+    }
 
+    // --- CRIAÇÃO E ENTRADA EM SALAS ---
+
+    function getUserName() {
+      const nameInput = document.getElementById('input-username').value.trim();
+      return nameInput || 'Jogador ' + Math.floor(Math.random() * 1000);
+    }
+
+    function createRoom() {
+      const username = getUserName();
+      document.getElementById('header-name').innerText = username;
+      roomCode = generateRoomCode();
+      isHost = true;
+
+      const fullPeerId = 'ludo-room-' + roomCode;
+      
+      initPeer(fullPeerId, () => {
+        currentGameState = {
+          code: roomCode,
+          status: 'waiting',
+          currentTurnIndex: 0,
+          diceValue: null,
+          hasRolled: false,
+          turnTimeLeft: 40,
+          winner: null,
+          players: [
+            {
+              id: myId,
+              name: username,
+              avatar: userAvatarBase64,
+              color: PLAYER_COLORS[0]
+            }
+          ],
+          pawns: {
+            red: [-1, -1, -1, -1],
+            green: [-1, -1, -1, -1],
+            yellow: [-1, -1, -1, -1],
+            blue: [-1, -1, -1, -1]
+          }
+        };
+
+        switchToGameScreen();
+        renderGameState(currentGameState);
+        startTimerLoop();
+      });
+    }
+
+    function joinRoom() {
       const codeInput = document.getElementById('input-room-code').value.trim().toUpperCase();
       if (codeInput.length !== 4) {
-        showMsgModal("Código Inválido", "Digite um código de sala válido de 4 letras.");
+        showMsgModal('Código Inválido', 'Insira um código de sala válido com 4 letras.');
         return;
       }
 
-      const username = document.getElementById('input-username').value.trim() || `Jogador ${Math.floor(Math.random()*100)}`;
+      const username = getUserName();
       document.getElementById('header-name').innerText = username;
-
       roomCode = codeInput;
-      roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+      isHost = false;
 
-      try {
-        const snap = await getDoc(roomRef);
-        if (!snap.exists()) {
-          showMsgModal("Não Encontrada", "A sala informada não existe.");
-          return;
-        }
+      initPeer(myId, () => {
+        const hostPeerId = 'ludo-room-' + roomCode;
+        const conn = peer.connect(hostPeerId);
 
-        const data = snap.data();
-
-        // Verificar se jogador já está na sala
-        const existingPlayer = data.players.find(p => p.id === currentUser.uid);
-        if (!existingPlayer) {
-          if (data.players.length >= 4) {
-            showMsgModal("Sala Cheia", "Esta sala já possui o número máximo de 4 jogadores.");
-            return;
-          }
-          if (data.status !== 'waiting') {
-            showMsgModal("Em Andamento", "Esta partida já foi iniciada.");
-            return;
-          }
-
-          // Atribuir cor disponível
-          const takenColors = data.players.map(p => p.color);
-          const availableColor = PLAYER_COLORS.find(c => !takenColors.includes(c));
-
-          data.players.push({
-            id: currentUser.uid,
-            name: username,
-            avatar: userAvatarBase64,
-            color: availableColor,
-            isHost: false
+        conn.on('open', () => {
+          connections.push(conn);
+          conn.send({
+            type: 'JOIN_REQUEST',
+            player: {
+              id: myId,
+              name: username,
+              avatar: userAvatarBase64
+            }
           });
+          switchToGameScreen();
+        });
 
-          await updateDoc(roomRef, { players: data.players });
-        }
+        conn.on('data', (data) => {
+          handlePeerData(data, conn);
+        });
 
-        subscribeToRoom();
-        showGameScreen();
-      } catch (err) {
-        console.error("Erro ao entrar na sala:", err);
-        showMsgModal("Erro", "Erro ao conectar com a sala.");
-      }
-    };
-
-    // Escutar Alterações na Sala em Tempo Real
-    function subscribeToRoom() {
-      if (unsubscribeRoom) unsubscribeRoom();
-
-      unsubscribeRoom = onSnapshot(roomRef, (snapshot) => {
-        if (!snapshot.exists()) {
-          showMsgModal("Encerrada", "A sala foi desfeita pelo hospedeiro.");
-          leaveRoom();
-          return;
-        }
-
-        const data = snapshot.data();
-        currentGameState = data;
-        renderGameState(data);
-      }, (error) => {
-        console.error("Erro no listener Firestore:", error);
+        conn.on('error', (err) => {
+          showMsgModal('Erro de Conexão', 'Não foi possível conectar à sala especificada.');
+        });
       });
     }
 
-    // Sincronizar estado caso haja reconexão/foco
-    async function syncRoomState() {
-      if (!roomRef) return;
-      const snap = await getDoc(roomRef);
-      if (snap.exists()) {
-        currentGameState = snap.data();
-        renderGameState(currentGameState);
-      }
+    function switchToGameScreen() {
+      document.getElementById('lobby-screen').classList.add('hidden');
+      document.getElementById('game-screen').classList.remove('hidden');
+      document.getElementById('display-room-code').innerText = roomCode;
+      generateQRCode();
     }
 
-    // Renderizar o Estado Atual do Jogo no UI
-    function renderGameState(data) {
-      document.getElementById('display-room-code').innerText = data.code;
-      document.getElementById('player-count').innerText = data.players.length;
+    function startGame() {
+      if (!isHost || !currentGameState) return;
+      if (currentGameState.players.length < 1) return;
 
-      // Atualizar QR Code
-      const shareUrl = `${window.location.origin}${window.location.pathname}?room=${data.code}`;
-      document.getElementById('qr-room-link').innerText = shareUrl;
-      renderQRCode(shareUrl);
+      currentGameState.status = 'playing';
+      currentGameState.currentTurnIndex = 0;
+      currentGameState.diceValue = null;
+      currentGameState.hasRolled = false;
+      currentGameState.turnTimeLeft = 40;
 
-      // Renderizar Lista de Jogadores na Sidebar
-      const playersListEl = document.getElementById('players-list');
-      playersListEl.innerHTML = '';
+      localStats.matches++;
+      saveStats();
 
-      const activePlayer = data.players[data.currentTurnIndex];
-      const isMyTurn = activePlayer && activePlayer.id === currentUser.uid;
-
-      data.players.forEach((p, idx) => {
-        const isCurrentTurn = idx === data.currentTurnIndex && data.status === 'playing';
-        const item = document.createElement('div');
-        item.className = `flex items-center justify-between p-2.5 rounded-xl border transition ${
-          isCurrentTurn 
-            ? 'bg-slate-700/80 border-indigo-500 ring-2 ring-indigo-500/30' 
-            : 'bg-slate-900/60 border-slate-700/60'
-        }`;
-
-        item.innerHTML = `
-          <div class="flex items-center space-x-2.5">
-            <div class="relative">
-              <img src="${p.avatar}" class="w-8 h-8 rounded-full object-cover border-2 border-${p.color}-500"/>
-              <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-${p.color}-500 border border-slate-900"></span>
-            </div>
-            <div>
-              <div class="text-xs font-bold text-slate-200 flex items-center gap-1">
-                ${p.name} ${p.isHost ? '<i class="fa-solid fa-crown text-amber-400 text-[10px]" title="Host"></i>' : ''}
-              </div>
-              <span class="text-[10px] text-slate-400 capitalize">Cor: ${COLOR_NAMES[p.color]}</span>
-            </div>
-          </div>
-          ${isCurrentTurn ? '<span class="text-[10px] font-bold text-indigo-400 animate-pulse uppercase tracking-wider">Jogando</span>' : ''}
-        `;
-        playersListEl.appendChild(item);
-      });
-
-      // Exibir Botão de Iniciar Partida para o Host se houver ao menos 2 jogadores e estado 'waiting'
-      const isHost = data.hostId === currentUser.uid;
-      const btnStart = document.getElementById('btn-start-game');
-      if (isHost && data.status === 'waiting' && data.players.length >= 2) {
-        btnStart.classList.remove('hidden');
-      } else {
-        btnStart.classList.add('hidden');
-      }
-
-      // Atualizar Badge de Status da Sala
-      const badge = document.getElementById('room-status-badge');
-      if (data.status === 'waiting') {
-        badge.innerText = 'Aguardando';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
-      } else if (data.status === 'playing') {
-        badge.innerText = 'Em Jogo';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-      } else if (data.status === 'finished') {
-        badge.innerText = 'Finalizado';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30';
-      }
-
-      // Status das Ações e Botão do Dado
-      const btnRoll = document.getElementById('btn-roll-dice');
-      const diceValueEl = document.getElementById('dice-value');
-      const descTurn = document.getElementById('status-turn-desc');
-
-      if (data.status === 'playing') {
-        descTurn.innerText = isMyTurn 
-          ? "Sua vez de jogar!" 
-          : `Aguardando a jogada de ${activePlayer.name}...`;
-
-        if (data.diceValue) {
-          diceValueEl.innerHTML = `<span class="text-3xl text-white font-black">${data.diceValue}</span>`;
-        } else {
-          diceValueEl.innerHTML = `<i class="fa-solid fa-dice-d6"></i>`;
-        }
-
-        // Habilitar rolagem de dado se for minha vez e o dado ainda não tiver sido jogado
-        if (isMyTurn && !data.diceRolled) {
-          btnRoll.disabled = false;
-        } else {
-          btnRoll.disabled = true;
-        }
-
-        // Iniciar / Sincronizar o Timer de 40 Segundos
-        startTurnTimer(data.timerStartTime, isMyTurn);
-
-      } else {
-        btnRoll.disabled = true;
-        clearInterval(turnTimerInterval);
-      }
-
-      // Renderizar Peões no Tabuleiro
-      renderPawnsOnBoard(data);
-
-      // Checar se há vencedor
-      if (data.status === 'finished' && data.winner) {
-        handleWinnerDeclared(data.winner);
-      }
+      broadcastState(currentGameState);
     }
 
-    // Iniciar a Partida (Apenas Host)
-    window.startGame = async () => {
-      if (!roomRef || !currentGameState) return;
+    // --- REGRAS DO JOGO & JOGADAS ---
 
-      await updateDoc(roomRef, {
-        status: 'playing',
-        currentTurnIndex: 0,
-        timerStartTime: Date.now(),
-        diceValue: null,
-        diceRolled: false
-      });
-    };
-
-    // --- SISTEMA DE TIMER DE 40 SEGUNDOS COM JOGADA AUTOMÁTICA ---
-    function startTurnTimer(startTimeMs, isMyTurn) {
-      clearInterval(turnTimerInterval);
-
-      const updateTimerUI = () => {
-        const elapsed = Math.floor((Date.now() - startTimeMs) / 1000);
-        const remaining = Math.max(0, 40 - elapsed);
-        
-        document.getElementById('timer-text').innerText = `${remaining}s`;
-        const percentage = (remaining / 40) * 100;
-        document.getElementById('timer-bar').style.width = `${percentage}%`;
-
-        // Se estourar os 40s e for a MINHA VEZ, dispara a jogada automática
-        if (remaining <= 0 && isMyTurn && currentGameState && currentGameState.status === 'playing') {
-          clearInterval(turnTimerInterval);
-          executeAutoPlay();
-        }
-      };
-
-      updateTimerUI();
-      turnTimerInterval = setInterval(updateTimerUI, 1000);
-    }
-
-    // Executar Jogada Automática ao Expirar o Tempo
-    async function executeAutoPlay() {
-      console.log("Tempo esgotado! Executando jogada automática...");
+    function rollDice() {
       if (!currentGameState || currentGameState.status !== 'playing') return;
+      
+      const currentPlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      if (currentPlayer.id !== myId && !isHost) return;
+      if (currentGameState.hasRolled) return;
 
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (activePlayer.id !== currentUser.uid) return;
-
-      // Se o dado não foi rolado ainda, rola o dado automaticamente
-      let dice = currentGameState.diceValue;
-      if (!currentGameState.diceRolled) {
-        dice = Math.floor(Math.random() * 6) + 1;
+      if (!isHost) {
+        connections[0].send({ type: 'ROLL_DICE', playerId: myId });
+        return;
       }
 
-      const playerColor = activePlayer.color;
-      const pawns = currentGameState.pawns[playerColor];
-      const validMoves = getValidMovesForPlayer(playerColor, pawns, dice);
-
-      if (validMoves.length > 0) {
-        // Escolhe o primeiro peão válido automaticamente
-        const pawnIndex = validMoves[0];
-        await movePawn(playerColor, pawnIndex, dice);
-      } else {
-        // Nenhum movimento possível, passa o turno
-        await passTurn();
-      }
+      executeRollDice();
     }
 
-    // --- ROLAGEM DE DADO E LÓGICA DE MOVIMENTO ---
-
-    window.rollDice = async () => {
-      if (!currentGameState || currentGameState.status !== 'playing') return;
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (activePlayer.id !== currentUser.uid || currentGameState.diceRolled) return;
-
-      // Animação visual de giro do dado
+    function executeRollDice() {
       const diceContainer = document.getElementById('dice-container');
       diceContainer.classList.add('dice-rolling');
 
-      setTimeout(async () => {
+      setTimeout(() => {
         diceContainer.classList.remove('dice-rolling');
-        const rolledValue = Math.floor(Math.random() * 6) + 1;
+        const roll = Math.floor(Math.random() * 6) + 1;
+        currentGameState.diceValue = roll;
+        currentGameState.hasRolled = true;
 
-        const playerColor = activePlayer.color;
-        const pawns = currentGameState.pawns[playerColor];
-        const validMoves = getValidMovesForPlayer(playerColor, pawns, rolledValue);
+        const activeColor = currentGameState.players[currentGameState.currentTurnIndex].color;
+        const validMoves = getValidMoves(activeColor, roll);
 
-        await updateDoc(roomRef, {
-          diceValue: rolledValue,
-          diceRolled: true
-        });
-
-        // Se não houver nenhum movimento válido possível para o jogador, passa a vez automaticamente após 1.5s
         if (validMoves.length === 0) {
-          setTimeout(async () => {
-            await passTurn();
-          }, 1500);
+          // Nenhuma jogada possível: passa a vez após breve pausa
+          setTimeout(() => {
+            nextTurn();
+          }, 1200);
         }
+
+        broadcastState(currentGameState);
       }, 400);
-    };
-
-    // Obter Peões Válidos para Mover
-    function getValidMovesForPlayer(color, pawns, dice) {
-      const validIndices = [];
-      pawns.forEach((pos, idx) => {
-        if (pos === -1) {
-          // Para sair da base, precisa tirar 6 no dado
-          if (dice === 6) validIndices.push(idx);
-        } else if (pos + dice <= 56) {
-          // Não pode ultrapassar a casa final (56)
-          validIndices.push(idx);
-        }
-      });
-      return validIndices;
     }
 
-    // Mover Peão Selecionado
-    async function movePawn(color, pawnIndex, dice) {
-      if (!currentGameState || currentGameState.status !== 'playing') return;
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (activePlayer.id !== currentUser.uid) return;
+    function getValidMoves(color, diceVal) {
+      const positions = currentGameState.pawns[color];
+      const moves = [];
 
-      let pawnsState = JSON.parse(JSON.stringify(currentGameState.pawns));
-      let currentPos = pawnsState[color][pawnIndex];
-      let newPos = currentPos === -1 ? 0 : currentPos + dice;
+      positions.forEach((pos, idx) => {
+        if (pos === -1 && diceVal === 6) {
+          moves.push(idx); // Pode sair da base
+        } else if (pos >= 0 && pos + diceVal <= 56) {
+          moves.push(idx); // Movimento válido no circuito
+        }
+      });
 
-      pawnsState[color][pawnIndex] = newPos;
+      return moves;
+    }
 
-      let capturedEnemy = false;
+    function movePawn(pawnIndex) {
+      if (!currentGameState || !currentGameState.hasRolled) return;
 
-      // Checar captura de inimigos caso a nova posição não seja na casa final (56) e nem em Estrela/Casa Segura
-      if (newPos > 0 && newPos < 51) {
-        const targetBoardCoord = getBoardCoordinates(color, newPos);
-        const isSafe = SAFE_POSITIONS.some(([sr, sc]) => sr === targetBoardCoord[0] && sc === targetBoardCoord[1]);
+      const currentPlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      if (currentPlayer.id !== myId && !isHost) return;
 
-        if (!isSafe) {
-          // Verificar se há peões de adversários na mesma coordenada
-          Object.keys(pawnsState).forEach(enemyColor => {
-            if (enemyColor !== color) {
-              pawnsState[enemyColor].forEach((ePos, eIdx) => {
-                if (ePos >= 0 && ePos < 51) {
-                  const enemyCoord = getBoardCoordinates(enemyColor, ePos);
-                  if (enemyCoord[0] === targetBoardCoord[0] && enemyCoord[1] === targetBoardCoord[1]) {
-                    // Captura! O peão inimigo volta para a base (-1)
-                    pawnsState[enemyColor][eIdx] = -1;
-                    capturedEnemy = true;
-                    localStats.captures++;
-                    saveStatsToStorage();
-                  }
-                }
-              });
-            }
-          });
+      if (!isHost) {
+        connections[0].send({ type: 'MOVE_PAWN', playerId: myId, pawnIndex: pawnIndex });
+        return;
+      }
+
+      executeMovePawn(currentPlayer.color, pawnIndex, currentGameState.diceValue);
+    }
+
+    function executeMovePawn(color, pawnIndex, diceVal) {
+      let currentPos = currentGameState.pawns[color][pawnIndex];
+
+      if (currentPos === -1 && diceVal === 6) {
+        currentGameState.pawns[color][pawnIndex] = 0;
+      } else if (currentPos >= 0) {
+        const nextPos = currentPos + diceVal;
+        if (nextPos <= 56) {
+          currentGameState.pawns[color][pawnIndex] = nextPos;
+          checkCaptures(color, nextPos);
         }
       }
 
-      // Verificar Vitória (todos os 4 peões na posição 56)
-      const hasWon = pawnsState[color].every(p => p === 56);
+      // Condição de Vitória (todos os 4 peões na casa 56)
+      if (currentGameState.pawns[color].every(p => p === 56)) {
+        currentGameState.winner = currentPlayerName();
+        currentGameState.status = 'finished';
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
 
-      let nextTurnIndex = currentGameState.currentTurnIndex;
-      // Regra do Ludo: Tirar 6 no dado ou capturar um peão dá direito a jogar novamente!
-      if (!hasWon && dice !== 6 && !capturedEnemy) {
-        nextTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.players.length;
+        if (currentGameState.players[currentGameState.currentTurnIndex].id === myId) {
+          localStats.victories++;
+          saveStats();
+        }
+
+        broadcastState(currentGameState);
+        return;
       }
 
-      await updateDoc(roomRef, {
-        pawns: pawnsState,
-        currentTurnIndex: nextTurnIndex,
-        diceValue: null,
-        diceRolled: false,
-        timerStartTime: Date.now(),
-        status: hasWon ? 'finished' : 'playing',
-        winner: hasWon ? activePlayer : null
-      });
-    }
-
-    // Passar a Vez
-    async function passTurn() {
-      if (!currentGameState) return;
-      const nextTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.players.length;
-
-      await updateDoc(roomRef, {
-        currentTurnIndex: nextTurnIndex,
-        diceValue: null,
-        diceRolled: false,
-        timerStartTime: Date.now()
-      });
-    }
-
-    // --- CONVERSÃO DE POSIÇÕES DE PEÃO EM COORDENADAS DA GRADE (15x15) ---
-    function getBoardCoordinates(color, pos) {
-      if (pos === -1) return null; // Está na base
-
-      if (pos <= 50) {
-        // Percurso no circuito principal
-        const offset = START_INDEX[color];
-        const circuitIndex = (pos + offset) % MAIN_CIRCUIT.length;
-        return MAIN_CIRCUIT[circuitIndex];
+      // Se tirar 6, joga novamente; caso contrário, passa a vez
+      if (diceVal === 6) {
+        currentGameState.hasRolled = false;
+        currentGameState.turnTimeLeft = 40;
+        broadcastState(currentGameState);
       } else {
-        // Reta final da cor (posições 51 até 56)
-        const stretchIndex = pos - 51;
-        return HOME_STRETCH[color][stretchIndex];
+        nextTurn();
       }
     }
 
-    // Renderizar Peões Dinamicamente na Grade do Tabuleiro
-    function renderPawnsOnBoard(data) {
-      // Limpar peões anteriores
-      document.querySelectorAll('.pawn').forEach(el => el.remove());
+    function checkCaptures(moverColor, pathIndex) {
+      if (pathIndex > 51) return; // Reta final é segura
 
-      const activePlayer = data.players[data.currentTurnIndex];
-      const isMyTurn = activePlayer && activePlayer.id === currentUser.uid;
-      const dice = data.diceValue;
+      const absCoords = getAbsoluteCoords(moverColor, pathIndex);
+      if (SAFE_POSITIONS.some(([r, c]) => r === absCoords[0] && c === absCoords[1])) {
+        return; // Casa segura (estrela)
+      }
 
-      Object.keys(data.pawns).forEach(color => {
-        const playerObj = data.players.find(p => p.color === color);
-        const avatarSrc = playerObj ? playerObj.avatar : generateDefaultAvatarSVG();
+      // Verifica peões de outras cores na mesma coordenada
+      Object.keys(currentGameState.pawns).forEach(color => {
+        if (color === moverColor) return;
 
-        data.pawns[color].forEach((pos, pIdx) => {
-          let targetCellId = '';
+        currentGameState.pawns[color].forEach((pos, idx) => {
+          if (pos >= 0 && pos <= 51) {
+            const enemyCoords = getAbsoluteCoords(color, pos);
+            if (enemyCoords[0] === absCoords[0] && enemyCoords[1] === absCoords[1]) {
+              // Peão capturado! Retorna para a base (-1)
+              currentGameState.pawns[color][idx] = -1;
+              if (currentGameState.players[currentGameState.currentTurnIndex].id === myId) {
+                localStats.captures++;
+                saveStats();
+              }
+            }
+          }
+        });
+      });
+    }
+
+    function getAbsoluteCoords(color, pathIndex) {
+      if (pathIndex === -1) return null;
+
+      if (pathIndex <= 50) {
+        const offset = START_INDEX[color];
+        const globalIdx = (pathIndex + offset) % 52;
+        return MAIN_CIRCUIT[globalIdx];
+      } else {
+        // Reta Final
+        const homeIdx = pathIndex - 51;
+        return HOME_STRETCH[color][homeIdx];
+      }
+    }
+
+    function nextTurn() {
+      currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.players.length;
+      currentGameState.hasRolled = false;
+      currentGameState.diceValue = null;
+      currentGameState.turnTimeLeft = 40;
+      broadcastState(currentGameState);
+    }
+
+    function processPlayerAction(action) {
+      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      if (activePlayer.id !== action.playerId) return;
+
+      if (action.type === 'ROLL_DICE' && !currentGameState.hasRolled) {
+        executeRollDice();
+      } else if (action.type === 'MOVE_PAWN' && currentGameState.hasRolled) {
+        executeMovePawn(activePlayer.color, action.pawnIndex, currentGameState.diceValue);
+      }
+    }
+
+    // --- TIMERS & AUTO-PLAY DE 40s ---
+
+    function startTimerLoop() {
+      if (turnTimerInterval) clearInterval(turnTimerInterval);
+
+      turnTimerInterval = setInterval(() => {
+        if (!isHost || !currentGameState || currentGameState.status !== 'playing') return;
+
+        currentGameState.turnTimeLeft--;
+
+        if (currentGameState.turnTimeLeft <= 0) {
+          // Tempo Esgotado: Jogada Automática
+          const activeColor = currentGameState.players[currentGameState.currentTurnIndex].color;
+          
+          if (!currentGameState.hasRolled) {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            currentGameState.diceValue = roll;
+            currentGameState.hasRolled = true;
+
+            const validMoves = getValidMoves(activeColor, roll);
+            if (validMoves.length > 0) {
+              const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
+              executeMovePawn(activeColor, randomPawn, roll);
+            } else {
+              nextTurn();
+            }
+          } else {
+            const validMoves = getValidMoves(activeColor, currentGameState.diceValue);
+            if (validMoves.length > 0) {
+              const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
+              executeMovePawn(activeColor, randomPawn, currentGameState.diceValue);
+            } else {
+              nextTurn();
+            }
+          }
+        } else {
+          broadcastState(currentGameState);
+        }
+      }, 1000);
+    }
+
+    // --- RENDERIZAÇÃO DA INTERFACE & TABULEIRO ---
+
+    function renderGameState(state) {
+      if (!state) return;
+
+      // Atualiza lista de jogadores
+      const playersListDOM = document.getElementById('players-list');
+      playersListDOM.innerHTML = '';
+      document.getElementById('player-count').innerText = state.players.length;
+
+      const activePlayer = state.players[state.currentTurnIndex];
+      const isMyTurn = activePlayer && activePlayer.id === myId;
+
+      state.players.forEach((p, idx) => {
+        const isTurn = idx === state.currentTurnIndex && state.status === 'playing';
+        const card = document.createElement('div');
+        card.className = `flex items-center justify-between p-2.5 rounded-xl border transition ${
+          isTurn ? 'bg-indigo-900/40 border-indigo-500 shadow-md' : 'bg-slate-900/60 border-slate-700/60'
+        }`;
+
+        card.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <img src="${p.avatar}" class="w-8 h-8 rounded-full object-cover border-2" style="border-color: ${p.color};"/>
+              ${isTurn ? '<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span></span>' : ''}
+            </div>
+            <div>
+              <div class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <span>${p.name}</span>
+                ${p.id === myId ? '<span class="text-[9px] bg-slate-700 text-indigo-300 px-1.5 py-0.2 rounded font-normal">Você</span>' : ''}
+              </div>
+              <span class="text-[10px] uppercase font-semibold tracking-wider" style="color: ${p.color}">${COLOR_NAMES[p.color]}</span>
+            </div>
+          </div>
+        `;
+        playersListDOM.appendChild(card);
+      });
+
+      // Botão de Iniciar Partida (Apenas Host)
+      const btnStart = document.getElementById('btn-start-game');
+      const roomBadge = document.getElementById('room-status-badge');
+
+      if (state.status === 'waiting') {
+        roomBadge.innerText = 'Aguardando';
+        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
+        if (isHost) {
+          btnStart.classList.remove('hidden');
+        } else {
+          btnStart.classList.add('hidden');
+        }
+      } else if (state.status === 'playing') {
+        roomBadge.innerText = 'Em Jogo';
+        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        btnStart.classList.add('hidden');
+      } else if (state.status === 'finished') {
+        roomBadge.innerText = 'Finalizada';
+        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+        btnStart.classList.add('hidden');
+      }
+
+      // Painel de Dado e Descrição
+      const btnRoll = document.getElementById('btn-roll-dice');
+      const turnDesc = document.getElementById('status-turn-desc');
+      const diceValContainer = document.getElementById('dice-value');
+
+      if (state.diceValue) {
+        diceValContainer.innerText = state.diceValue;
+      } else {
+        diceValContainer.innerHTML = `<i class="fa-solid fa-dice-d6"></i>`;
+      }
+
+      if (state.status === 'playing') {
+        if (isMyTurn) {
+          turnDesc.innerText = state.hasRolled ? 'Clique em um peão para mover' : 'Sua vez! Jogue o dado.';
+          turnDesc.className = 'text-xs text-indigo-400 font-bold animate-pulse mb-2';
+          btnRoll.disabled = state.hasRolled;
+        } else {
+          turnDesc.innerText = `Vez de ${activePlayer ? activePlayer.name : '...'}`;
+          turnDesc.className = 'text-xs text-slate-400 font-medium mb-2';
+          btnRoll.disabled = true;
+        }
+      } else if (state.status === 'finished') {
+        turnDesc.innerText = `🏆 Vitória de ${state.winner}!`;
+        turnDesc.className = 'text-xs text-amber-400 font-bold mb-2';
+        btnRoll.disabled = true;
+      }
+
+      // Timer
+      const timerBar = document.getElementById('timer-bar');
+      const timerText = document.getElementById('timer-text');
+      const pct = Math.max(0, (state.turnTimeLeft / 40) * 100);
+      timerBar.style.width = `${pct}%`;
+      timerText.innerText = `${state.turnTimeLeft}s`;
+
+      // Renderiza Peões no Tabuleiro
+      renderPawnsOnBoard(state);
+    }
+
+    function renderPawnsOnBoard(state) {
+      // Limpa peões anteriores das células
+      document.querySelectorAll('.cell .pawn').forEach(el => el.remove());
+
+      const activePlayer = state.players[state.currentTurnIndex];
+      const isMyTurn = activePlayer && activePlayer.id === myId;
+      const validPawnsToMove = (isMyTurn && state.hasRolled) ? getValidMoves(activePlayer.color, state.diceValue) : [];
+
+      state.players.forEach(player => {
+        const color = player.color;
+        const positions = state.pawns[color];
+
+        positions.forEach((pos, pawnIdx) => {
+          let targetCellId = null;
 
           if (pos === -1) {
-            // Desenhar na base inicial da cor
-            const [r, c] = HOME_BASE_COORDS[color][pIdx];
-            targetCellId = `cell-${r}-${c}`;
+            // Na Base
+            const coords = HOME_BASE_COORDS[color][pawnIdx];
+            targetCellId = `cell-${coords[0]}-${coords[1]}`;
           } else {
-            const [r, c] = getBoardCoordinates(color, pos);
-            targetCellId = `cell-${r}-${c}`;
+            // No Circuito
+            const coords = getAbsoluteCoords(color, pos);
+            if (coords) targetCellId = `cell-${coords[0]}-${coords[1]}`;
           }
 
-          const cell = document.getElementById(targetCellId);
-          if (cell) {
-            const pawn = document.createElement('div');
-            pawn.className = `pawn bg-${color}-500`;
+          if (targetCellId) {
+            const cell = document.getElementById(targetCellId);
+            if (cell) {
+              const pawn = document.createElement('div');
+              pawn.className = `pawn bg-${color}-home`;
 
-            pawn.innerHTML = `<img src="${avatarSrc}" class="pawn-avatar"/>`;
-
-            // Verificar se o peão pode se mover no turno atual
-            if (isMyTurn && activePlayer.color === color && data.diceRolled && dice) {
-              const validMoves = getValidMovesForPlayer(color, data.pawns[color], dice);
-              if (validMoves.includes(pIdx)) {
+              if (isMyTurn && player.color === activePlayer.color && validPawnsToMove.includes(pawnIdx)) {
                 pawn.classList.add('movable');
                 pawn.onclick = (e) => {
                   e.stopPropagation();
-                  movePawn(color, pIdx, dice);
+                  movePawn(pawnIdx);
                 };
               }
-            }
 
-            cell.appendChild(pawn);
+              pawn.innerHTML = `<img src="${player.avatar}" class="pawn-avatar" />`;
+              cell.appendChild(pawn);
+            }
           }
         });
       });
     }
 
-    // --- CELEBRAÇÃO DE VITÓRIA ---
-    function handleWinnerDeclared(winner) {
-      clearInterval(turnTimerInterval);
-      
-      // Efeito Confetti
-      try {
-        confetti({
-          particleCount: 120,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-      } catch(e){}
-
-      if (winner.id === currentUser.uid) {
-        localStats.victories++;
-        saveStatsToStorage();
-        showMsgModal("VITÓRIA!", "Parabéns! Você venceu a partida de Ludo!");
-      } else {
-        showMsgModal("Fim de Jogo", `${winner.name} venceu a partida!`);
-      }
-
-      // Atualizar contagem de partidas jogadas
-      localStats.matches++;
-      saveStatsToStorage();
+    function currentPlayerName() {
+      if (!currentGameState) return '';
+      const p = currentGameState.players[currentGameState.currentTurnIndex];
+      return p ? p.name : '';
     }
 
-    // --- AUXILIARES E MODAIS DA INTERFACE ---
+    // --- MODAIS E UTILITÁRIOS ---
 
-    function showGameScreen() {
-      document.getElementById('lobby-screen').classList.add('hidden');
-      document.getElementById('game-screen').classList.remove('hidden');
+    function generateQRCode() {
+      const qrContainer = document.getElementById('qrcode-container');
+      qrContainer.innerHTML = '';
+      const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
+      document.getElementById('qr-room-link').innerText = joinUrl;
+
+      new QRCode(qrContainer, {
+        text: joinUrl,
+        width: 160,
+        height: 160
+      });
     }
 
-    function leaveRoom() {
-      if (unsubscribeRoom) unsubscribeRoom();
-      roomCode = null;
-      roomRef = null;
-      document.getElementById('lobby-screen').classList.remove('hidden');
-      document.getElementById('game-screen').classList.add('hidden');
-    }
-
-    // QR Code Generator
-    function renderQRCode(text) {
-      const container = document.getElementById('qrcode-container');
-      container.innerHTML = '';
-      try {
-        new QRCode(container, {
-          text: text,
-          width: 140,
-          height: 140,
-          colorDark : "#0f172a",
-          colorLight : "#ffffff",
-          correctLevel : QRCode.CorrectLevel.H
-        });
-      } catch(e) {
-        console.warn("QRCode.js não carregado", e);
-      }
-    }
-
-    window.copyRoomLink = () => {
-      if (!roomCode) return;
-      const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+    function copyRoomLink() {
+      const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
       
       const tempInput = document.createElement('input');
-      tempInput.value = shareUrl;
+      tempInput.value = joinUrl;
       document.body.appendChild(tempInput);
       tempInput.select();
       document.execCommand('copy');
       document.body.removeChild(tempInput);
 
-      showMsgModal("Link Copiado", "O link direto da sala foi copiado para a área de transferência.");
-    };
+      showMsgModal('Link Copiado!', 'O link da sala foi copiado para sua área de transferência.');
+    }
 
-    window.toggleQRModal = () => {
+    function toggleQRModal() {
       const modal = document.getElementById('qr-modal');
       modal.classList.toggle('hidden');
-    };
+    }
 
-    window.toggleStatsModal = () => {
+    function toggleStatsModal() {
       const modal = document.getElementById('stats-modal');
       modal.classList.toggle('hidden');
-    };
+    }
 
-    window.showMsgModal = (title, body) => {
+    function showMsgModal(title, body) {
       document.getElementById('msg-title').innerText = title;
       document.getElementById('msg-body').innerText = body;
       document.getElementById('msg-modal').classList.remove('hidden');
-    };
+    }
 
-    window.closeMsgModal = () => {
+    function closeMsgModal() {
       document.getElementById('msg-modal').classList.add('hidden');
-    };
+    }
   </script>
 </body>
 </html>
