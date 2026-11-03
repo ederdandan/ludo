@@ -318,3 +318,30 @@ test('partidas inteiras entre bots terminam com ranking completo', () => {
     assert.equal(new Set(s.ranking).size, 4);
   }
 });
+
+test('duplas: quem terminou move os peões do parceiro e parceiros não se capturam', () => {
+  const s = game(['red', 'green', 'yellow', 'blue'], { teams: true },
+    { red: [56, 56, 56, 56], yellow: [10, -1, -1, -1], green: [-1, -1, -1, -1], blue: [-1, -1, -1, -1] });
+  assert.equal(E.playColor(s, 0), 'yellow');
+  roll(s, 3);
+  assert.deepEqual(s.turn.validMoves, [0]);
+  E.move(s, 0);
+  assert.equal(s.pieces.yellow[0], 13);
+});
+
+test('duplas: a dupla que leva os 8 peões vence', () => {
+  const s = game(['red', 'green', 'yellow', 'blue'], { teams: true },
+    { red: [56, 56, 56, 56], yellow: [56, 56, 56, 53] });
+  roll(s, 3);
+  const ev = E.move(s, 3);
+  assert.ok(kinds(ev).includes('TEAM_FINISHED'));
+  assert.equal(s.phase, 'finished');
+  assert.deepEqual(s.seats.map(x => x.finishedRank), [1, 2, 1, 2]);
+});
+
+test('duplas: encerrar antes do fim classifica por dupla', () => {
+  const s = game(['red', 'green', 'yellow', 'blue'], { teams: true },
+    { red: [30, -1, -1, -1], yellow: [20, -1, -1, -1], green: [5, -1, -1, -1], blue: [-1, -1, -1, -1] });
+  E.endEarly(s);
+  assert.deepEqual(s.seats.map(x => x.finishedRank), [1, 2, 1, 2]);
+});

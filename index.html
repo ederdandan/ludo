@@ -105,6 +105,17 @@
   .modal-box { background: #1e293b; border: 1px solid rgba(148, 163, 184, .2); border-radius: 1.2rem; padding: 1.3rem; width: 100%; max-width: 440px; max-height: calc(100dvh - 32px); overflow: auto; box-shadow: 0 30px 60px rgba(0, 0, 0, .5); }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #f8fafc; color: #0f172a; padding: .7rem 1.1rem; border-radius: .8rem; font-weight: 600; z-index: 200; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); max-width: calc(100vw - 32px); }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .emote-btn { flex: 1; min-height: 44px; font-size: 1.5rem; border-radius: .7rem; background: rgba(148, 163, 184, .12); transition: transform .1s, opacity .2s; }
+  .emote-btn:active:not(:disabled) { transform: scale(.9); }
+  .emote-btn:disabled { opacity: .35; }
+  .emote-bubble { position: absolute; transform: translate(-50%, -50%); font-size: 10cqw; pointer-events: none; z-index: 300; animation: emoteUp 2.2s ease-out forwards; filter: drop-shadow(0 .6cqw 1cqw rgba(0, 0, 0, .4)); }
+  @keyframes emoteUp {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+    15% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+    70% { opacity: 1; transform: translate(-50%, -70%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -140%) scale(.9); }
+  }
+  @media (prefers-reduced-motion: reduce) { .emote-bubble { animation: emoteFade 2.2s linear forwards; } @keyframes emoteFade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
   .net-banner { position: fixed; top: 0; left: 0; right: 0; background: #f59e0b; color: #111827; text-align: center; font-weight: 700; padding: 8px; z-index: 150; }
   .room-code { font-size: 2.6rem; font-weight: 900; letter-spacing: .35em; font-family: ui-monospace, monospace; padding-left: .35em; }
   .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(148, 163, 184, .3); border-top-color: #f59e0b; animation: spin 1s linear infinite; margin: 0 auto; }
@@ -152,6 +163,7 @@
             </div>
           </div>
         </div>
+        <div id="emotes" class="card flex justify-between gap-1" hidden aria-label="Emotes"></div>
         <div class="card"><div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Jogadores</div><div id="players" class="flex flex-col gap-1"></div></div>
         <div class="card"><div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Últimas jogadas</div><ul id="history" class="text-sm text-slate-300 flex flex-col gap-1"></ul></div>
       </aside>
@@ -248,9 +260,11 @@ const LudoEngine = (() => {
         isBot: !!p.isBot, botLevel: p.isBot ? (p.botLevel || 'medium') : null,
         connected: true, afk: false, finishedRank: null, timeouts: 0,
       }));
+    if (r.teams && seats.length !== 4) r.teams = false; // duplas só com a mesa completa
     const pieces = {};
     for (const s of seats) pieces[s.color] = r.quickMode ? [0, -1, -1, -1] : [-1, -1, -1, -1];
     return {
+      gameId: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       stateVersion: 0, mode, phase: 'choosingFirst', rules: r, seats, pieces,
       turn: freshTurn(0), turnNumber: 0, ranking: [], lastEvents: [], log: [],
     };
@@ -322,6 +336,16 @@ const LudoEngine = (() => {
     return res;
   }
 
+  // Cor que o assento move: no modo duplas, quem já levou os 4 peões move os do parceiro.
+  function playColor(state, seatIdx) {
+    const seat = state.seats[seatIdx];
+    if (state.rules.teams && state.pieces[seat.color].every(r => r === GOAL)) {
+      const partner = state.seats.find(s => s.color !== seat.color && TEAM[s.color] === TEAM[seat.color]);
+      if (partner) return partner.color;
+    }
+    return seat.color;
+  }
+
   function unfinishedSeats(state) {
     return state.seats.filter(s => s.finishedRank == null);
   }
@@ -341,6 +365,20 @@ const LudoEngine = (() => {
   const progressOf = (state, color) => state.pieces[color].reduce((a, r) => a + r + 1, 0);
 
   function finishGame(state, events) {
+    if (state.rules.teams) { // classifica por dupla, pelo progresso somado
+      const teamProgress = (team) => state.seats.filter(s => TEAM[s.color] === team).reduce((a, s) => a + progressOf(state, s.color), 0);
+      const order = [0, 1].sort((a, b) => teamProgress(b) - teamProgress(a));
+      state.ranking = [];
+      order.forEach((team, k) => state.seats.filter(s => TEAM[s.color] === team).forEach(s => {
+        s.finishedRank = k + 1;
+        state.ranking.push(s.seat);
+      }));
+      state.phase = 'finished';
+      state.turn.awaiting = null;
+      state.turn.validMoves = [];
+      events.push({ kind: 'GAME_OVER', ranking: state.ranking.slice() });
+      return;
+    }
     const rest = unfinishedSeats(state)
       .sort((a, b) => progressOf(state, b.color) - progressOf(state, a.color));
     for (const s of rest) {
@@ -356,8 +394,7 @@ const LudoEngine = (() => {
   function roll(state, rng = cryptoRng) {
     const t = state.turn;
     if (state.phase !== 'playing' || t.awaiting !== 'roll') return null;
-    const seat = state.seats[t.seat];
-    const color = seat.color;
+    const color = playColor(state, t.seat);
     const dice = rng();
     t.dice = dice;
     t.deadline = null;
@@ -400,7 +437,7 @@ const LudoEngine = (() => {
     const t = state.turn;
     if (state.phase !== 'playing' || t.awaiting !== 'move' || !t.validMoves.includes(pieceIdx)) return null;
     const seat = state.seats[t.seat];
-    const color = seat.color;
+    const color = playColor(state, t.seat);
     const dice = t.dice;
     const from = state.pieces[color][pieceIdx];
     let to, path;
@@ -441,7 +478,22 @@ const LudoEngine = (() => {
       }
     }
 
-    if (seat.finishedRank == null && state.pieces[color].every(r => r === GOAL)) {
+    if (state.rules.teams) {
+      const team = state.seats.filter(s => TEAM[s.color] === TEAM[color]);
+      if (team.every(s => state.pieces[s.color].every(r => r === GOAL))) {
+        const others = state.seats.filter(s => TEAM[s.color] !== TEAM[color]);
+        state.ranking = [...team, ...others].map(s => s.seat);
+        team.forEach(s => { s.finishedRank = 1; });
+        others.forEach(s => { s.finishedRank = 2; });
+        events.push({ kind: 'TEAM_FINISHED', seat: t.seat, seats: team.map(s => s.seat) });
+        state.phase = 'finished';
+        t.awaiting = null;
+        events.push({ kind: 'GAME_OVER', ranking: state.ranking.slice() });
+        bump(state, events);
+        return events;
+      }
+      if (color === seat.color && state.pieces[color].every(r => r === GOAL)) t.lastSixPiece = null; // passa a mover o parceiro
+    } else if (seat.finishedRank == null && state.pieces[color].every(r => r === GOAL)) {
       state.ranking.push(seat.seat);
       seat.finishedRank = state.ranking.length;
       events.push({ kind: 'PLAYER_FINISHED', seat: seat.seat, rank: seat.finishedRank });
@@ -553,7 +605,7 @@ const LudoEngine = (() => {
     const moves = t.validMoves;
     if (!moves.length) return null;
     if (moves.length === 1) return moves[0];
-    const color = state.seats[t.seat].color;
+    const color = playColor(state, t.seat);
     const list = moves.map(i => analyzeMove(state, color, i, t.dice));
 
     if (level === 'easy') {
@@ -576,8 +628,8 @@ const LudoEngine = (() => {
   }
 
   return {
-    COLORS, OFFSET, SAFE, TRACK, HOME, GOAL, LAST_MAIN, DEFAULT_RULES, HARD_WEIGHTS,
-    absPos, pointOf, cryptoRng, seatColorsFor, defaultColorsFor, isOpponent,
+    COLORS, OFFSET, TEAM, SAFE, TRACK, HOME, GOAL, LAST_MAIN, DEFAULT_RULES, HARD_WEIGHTS,
+    absPos, pointOf, cryptoRng, seatColorsFor, defaultColorsFor, isOpponent, playColor,
     createGame, chooseFirst, computeValidMoves, roll, move, endEarly,
     analyzeMove, hardScore, chooseMove, progressOf,
   };
@@ -621,6 +673,7 @@ const RULE_DEFS = [
   { key: 'endOnFirstWinner', label: 'Encerrar no 1º vencedor', def: false },
   { key: 'autoSingleMove', label: 'Movimento automático quando há só um', def: true },
   { key: 'quickMode', label: 'Modo rápido (1 peão já na saída)', def: false },
+  { key: 'teams', label: 'Modo duplas: ●+■ contra ▲+◆ (só com 4 jogadores)', def: false },
 ];
 const defaultRuleToggles = () => Object.fromEntries(RULE_DEFS.map(r => [r.key, r.def]));
 const toEngineRules = (t) => ({
@@ -628,7 +681,7 @@ const toEngineRules = (t) => ({
   blocks: !!t.blocks, captureBonus: !!t.captureBonus, finishBonus: !!t.finishBonus,
   threeSixesLimit: !!t.threeSixesLimit, threeSixesPenalty: !!t.threeSixesPenalty,
   exactFinish: !!t.exactFinish, endOnFirstWinner: !!t.endOnFirstWinner,
-  autoSingleMove: !!t.autoSingleMove, quickMode: !!t.quickMode, teams: false,
+  autoSingleMove: !!t.autoSingleMove, quickMode: !!t.quickMode, teams: !!t.teams,
 });
 
 // ---------- Utilidades ----------
@@ -860,6 +913,7 @@ function renderHome() {
     h('div', { class: 'grid grid-cols-2 gap-3' },
       h('button', { class: 'btn btn-ghost', onclick: () => hostRoom(null) }, h('i', { class: 'fa-solid fa-plus' }), 'Criar Sala'),
       h('button', { class: 'btn btn-ghost', onclick: () => openJoin('') }, h('i', { class: 'fa-solid fa-right-to-bracket' }), 'Entrar em Sala')),
+    h('button', { class: 'btn btn-ghost w-full', onclick: showStats }, h('i', { class: 'fa-solid fa-chart-simple' }), 'Estatísticas'),
     h('p', { class: 'text-center text-xs text-slate-500', text: 'Salas online: cada pessoa joga do próprio aparelho.' }),
   ));
   updateMuteButtons();
@@ -1101,6 +1155,7 @@ function resumeGame(saved) {
 
 function loadGame(state) {
   clearTimers();
+  if (!state.gameId) state.gameId = randomId(6);
   Game.state = state;
   Game.config = state.config;
   Game.busy = false;
@@ -1327,6 +1382,7 @@ async function playEvents(events) {
 
   for (const e of events) {
     const seat = e.seat != null ? s.seats[e.seat] : null;
+    Stats.onEvent(s, e);
     switch (e.kind) {
       case 'FIRST': // só os convidados recebem o sorteio como evento
         await showDrawOverlay(e);
@@ -1383,6 +1439,14 @@ async function playEvents(events) {
         if (!quick) celebrate(false);
         await wait(quick ? 100 : 300);
         break;
+      case 'TEAM_FINISHED': {
+        const names = e.seats.map(i => s.seats[i].name).join(' e ');
+        pushLog(`🏆 Dupla ${names} venceu`);
+        Sound.play('win');
+        celebrate(true);
+        await wait(quick ? 200 : 700);
+        break;
+      }
       case 'PLAYER_FINISHED':
         pushLog(`🏆 ${seatLabel(seat)} terminou em ${e.rank}º`);
         if (e.rank === 1) { Sound.play('win'); celebrate(true); }
@@ -1501,8 +1565,7 @@ function buildTokens() {
 function canPick(color, i) {
   const s = Game.state;
   if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'move') return false;
-  const seat = currentSeat();
-  return canControl(seat) && seat.color === color && s.turn.validMoves.includes(i);
+  return canControl(currentSeat()) && E.playColor(s, s.turn.seat) === color && s.turn.validMoves.includes(i);
 }
 
 function attachTokenHandlers(el, color, i) {
@@ -1561,7 +1624,7 @@ function layoutTokens(returning = new Set()) {
 
   const t = s.turn;
   const pickable = s.phase === 'playing' && !Game.busy && !Game.paused && t.awaiting === 'move' && canControl(currentSeat());
-  const turnColor = s.phase === 'playing' ? currentSeat().color : null;
+  const turnColor = s.phase === 'playing' ? E.playColor(s, t.seat) : null;
   const OFFS = { 1: [[0, 0]], 2: [[-0.2, 0], [0.2, 0]], 3: [[-0.2, -0.15], [0.2, -0.15], [0, 0.2]], 4: [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]] };
 
   for (const { r, c, items } of groups.values()) {
@@ -1607,6 +1670,7 @@ function render() {
   renderSixes();
   renderHistory();
   renderBaseLabels();
+  renderEmotes();
   layoutTokens();
   const pb = $('#btn-pause');
   pb.innerHTML = `<i class="fa-solid ${Game.paused ? 'fa-play' : 'fa-pause'}"></i>`;
@@ -1632,7 +1696,9 @@ function renderStatus() {
   } else if (isAuto(seat)) action = s.turn.awaiting === 'roll' ? 'vai rolar…' : 'pensando…';
   else action = 'jogando…';
   const tag = seat.connected === false ? ' (desconectado)' : seat.afk ? ' (ausente)' : '';
-  el.append('Vez de ', h('strong', { text: seat.name }), seat.isBot ? ' 🤖' : '', tag, ` ${CMETA[seat.color].sym} — ${action}`);
+  const pc = E.playColor(s, s.turn.seat);
+  const helping = pc !== seat.color ? ` (movendo ${CMETA[pc].sym} ${CMETA[pc].name})` : '';
+  el.append('Vez de ', h('strong', { text: seat.name }), seat.isBot ? ' 🤖' : '', tag, ` ${CMETA[seat.color].sym} — ${action}${helping}`);
 }
 
 function renderPlayers() {
@@ -1645,6 +1711,7 @@ function renderPlayers() {
     const current = s.phase === 'playing' && s.turn.seat === seat.seat;
     const tags = [];
     if (seat.isBot) tags.push(h('span', { class: 'badge', text: `🤖 ${LEVEL_NAME[seat.botLevel]}` }));
+    if (s.rules.teams) tags.push(h('span', { class: 'badge', text: `Dupla ${E.TEAM[seat.color] === 0 ? 'A' : 'B'}` }));
     if (s.mode === 'online' && isLocalSeat(seat)) tags.push(h('span', { class: 'badge !bg-emerald-500/30', text: 'você' }));
     if (seat.connected === false) tags.push(h('span', { class: 'badge !bg-red-500/30', text: 'offline' }));
     else if (seat.afk) tags.push(h('span', { class: 'badge !bg-amber-500/30', text: 'ausente' }));
@@ -1716,6 +1783,131 @@ function tickTimer() {
   requestAnimationFrame(tickTimer);
 }
 
+/* ---------- Estatísticas locais (só neste navegador) ---------- */
+const STAT_MODES = [['solo', 'Solo'], ['online', 'Online'], ['local', 'Local']];
+const Stats = {
+  load() { return Store.get('ludo:stats', {}); },
+  bucket(all, mode) {
+    all[mode] = Object.assign({
+      played: 0, wins: 0, podiums: 0, captured: 0, lost: 0, sixes: 0, streak: 0, bestStreak: 0,
+      winsByLevel: { easy: 0, medium: 0, hard: 0 },
+    }, all[mode] || {});
+    return all[mode];
+  },
+  add(mode, field, n = 1) {
+    if (!n) return;
+    const all = this.load();
+    this.bucket(all, mode)[field] += n;
+    Store.set('ludo:stats', all);
+  },
+  // Contabiliza o fim de uma partida uma única vez, para os assentos deste aparelho.
+  finish(s) {
+    const local = s.seats.filter(isLocalSeat);
+    if (!local.length || Store.get('ludo:statsLast', null) === s.gameId) return;
+    Store.set('ludo:statsLast', s.gameId);
+    const all = this.load();
+    const b = this.bucket(all, s.mode);
+    b.played++;
+    const best = Math.min(...local.map(x => x.finishedRank || 99));
+    if (best === 1) {
+      b.wins++;
+      b.streak++;
+      b.bestStreak = Math.max(b.bestStreak, b.streak);
+      const levels = s.seats.filter(x => x.isBot).map(x => x.botLevel);
+      const hardest = ['hard', 'medium', 'easy'].find(l => levels.includes(l));
+      if (s.mode === 'solo' && hardest) b.winsByLevel[hardest]++;
+    } else {
+      b.streak = 0;
+    }
+    if (best <= 3) b.podiums++;
+    Store.set('ludo:stats', all);
+  },
+  // Contadores durante a partida (seis, capturas)
+  onEvent(s, e) {
+    const seat = e.seat != null ? s.seats[e.seat] : null;
+    if (e.kind === 'ROLL' && e.value === 6 && isLocalSeat(seat)) this.add(s.mode, 'sixes');
+    if (e.kind === 'CAPTURE') {
+      if (isLocalSeat(seat)) this.add(s.mode, 'captured', e.victims.length);
+      const lost = e.victims.filter(v => isLocalSeat(s.seats.find(x => x.color === v.color))).length;
+      this.add(s.mode, 'lost', lost);
+    }
+  },
+};
+
+function showStats() {
+  let mode = 'solo';
+  let close;
+  const body = h('div', {});
+  const draw = () => {
+    const b = Stats.bucket(Stats.load(), mode);
+    const rows = [
+      ['Partidas jogadas', b.played], ['Vitórias (1º lugar)', b.wins], ['Pódios (1º a 3º)', b.podiums],
+      ['Peões capturados', b.captured], ['Peões perdidos', b.lost], ['6 tirados', b.sixes], ['Maior sequência de vitórias', b.bestStreak],
+    ];
+    if (mode === 'solo') LEVELS.forEach(([lv, name]) => rows.push([`Vitórias contra ${name}`, b.winsByLevel[lv] || 0]));
+    body.innerHTML = '';
+    body.append(
+      seg(STAT_MODES, mode, v => { mode = v; draw(); }, 'Modo'),
+      h('dl', { class: 'grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 mt-4' },
+        rows.flatMap(([k, v]) => [h('dt', { class: 'text-slate-300', text: k }), h('dd', { class: 'font-black text-right text-lg', text: String(v) })])));
+  };
+  draw();
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-xl font-black mb-3', text: 'Estatísticas' }),
+    body,
+    h('p', { class: 'text-xs text-slate-400 mt-4', text: 'Salvas apenas neste navegador.' }),
+    h('div', { class: 'grid grid-cols-2 gap-2 mt-4' },
+      h('button', { class: 'btn btn-ghost', onclick: () => {
+        if (confirm('Zerar todas as estatísticas deste navegador?')) { Store.del('ludo:stats'); draw(); }
+      } }, 'Zerar'),
+      h('button', { class: 'btn btn-primary', onclick: () => close() }, 'Fechar'))));
+}
+
+/* ---------- Emotes (online) ---------- */
+const EMOTES = ['👏', '😂', '😮', '😡', '🤝'];
+const EMOTE_COOLDOWN = 3000;
+const BASE_CENTER = { red: [20, 20], green: [80, 20], yellow: [80, 80], blue: [20, 80] }; // [left%, top%]
+let lastEmoteAt = 0;
+
+function renderEmotes() {
+  const box = $('#emotes');
+  const s = Game.state;
+  const mine = s && s.mode === 'online' && s.seats.some(isLocalSeat);
+  box.hidden = !mine;
+  if (!mine) return;
+  if (!box.childElementCount) {
+    EMOTES.forEach(em => box.append(h('button', { class: 'emote-btn', 'aria-label': `Enviar ${em}`, onclick: () => sendEmote(em) }, em)));
+  }
+}
+
+function sendEmote(emoji) {
+  const s = Game.state;
+  const seat = s && s.seats.find(isLocalSeat);
+  if (!seat || Date.now() - lastEmoteAt < EMOTE_COOLDOWN) return;
+  lastEmoteAt = Date.now();
+  const btns = [...document.querySelectorAll('.emote-btn')];
+  btns.forEach(b => { b.disabled = true; });
+  setTimeout(() => btns.forEach(b => { b.disabled = false; }), EMOTE_COOLDOWN);
+  if (Net.role === 'client') Net.send({ type: 'EMOTE', payload: { emoji } });
+  else hostEmote(seat.seat, emoji);
+}
+
+function hostEmote(seatIdx, emoji) {
+  Net.broadcast({ type: 'EMOTE', payload: { seat: seatIdx, emoji } });
+  showEmote(seatIdx, emoji);
+}
+
+function showEmote(seatIdx, emoji) {
+  const s = Game.state;
+  const seat = s && s.seats[seatIdx];
+  if (!seat || !EMOTES.includes(emoji) || $('#screen-game').hidden) return;
+  const [x, y] = BASE_CENTER[seat.color];
+  const el = h('div', { class: 'emote-bubble', style: `left:${x}%;top:${y}%`, text: emoji });
+  $('.board-wrap').append(el);
+  setTimeout(() => el.remove(), 2300);
+  Sound.play('turn');
+}
+
 /* ---------- Modais da partida ---------- */
 function rulesSummary(rules) {
   const yes = (b) => (b ? 'sim' : 'não');
@@ -1731,6 +1923,7 @@ function rulesSummary(rules) {
     ['Encerrar no 1º vencedor', yes(rules.endOnFirstWinner)],
     ['Movimento automático único', yes(rules.autoSingleMove)],
     ['Modo rápido', yes(rules.quickMode)],
+    ['Modo duplas', yes(rules.teams)],
     ['Tempo por ação', cfg.timer && cfg.timer.enabled ? `${rules.quickMode ? 10 : cfg.timer.seconds}s` : 'sem limite'],
   ];
 }
@@ -1819,17 +2012,20 @@ function showResults() {
   Game.resultsShown = true;
   clearTimers();
   if (Net.role !== 'client') save();
+  Stats.finish(s);
   const medals = ['🥇', '🥈', '🥉', '4º'];
-  const winner = s.seats[s.ranking[0]];
-  if (!winner.isBot) { Sound.play('win'); celebrate(true); }
+  const winners = s.seats.filter(x => x.finishedRank === 1);
+  const winner = winners[0];
+  if (winners.some(x => !x.isBot)) { Sound.play('win'); celebrate(true); }
+  const title = winners.length > 1 ? `${winners.map(x => x.name).join(' e ')} venceram!` : `${winner.name} venceu!`;
   let close;
   close = openModal(h('div', {},
-    h('h2', { class: 'text-2xl font-black text-center mb-1', text: winner.isBot ? `${winner.name} venceu!` : `${winner.name} venceu! 🎉` }),
+    h('h2', { class: 'text-2xl font-black text-center mb-1', text: title + (winners.some(x => !x.isBot) ? ' 🎉' : '') }),
     h('p', { class: 'text-center text-slate-400 text-sm mb-4', text: 'Classificação final' }),
-    h('div', { class: 'flex flex-col gap-1' }, s.ranking.map((seatIdx, k) => {
+    h('div', { class: 'flex flex-col gap-1' }, s.ranking.map((seatIdx) => {
       const seat = s.seats[seatIdx];
-      return h('div', { class: 'player-row' + (k === 0 ? ' current' : ''), style: `--c:var(--${seat.color})` },
-        h('span', { class: 'text-2xl w-9 text-center', text: medals[k] }),
+      return h('div', { class: 'player-row' + (seat.finishedRank === 1 ? ' current' : ''), style: `--c:var(--${seat.color})` },
+        h('span', { class: 'text-2xl w-9 text-center', text: medals[(seat.finishedRank || 4) - 1] }),
         avatarEl(seat.avatar, seat.color),
         h('span', { class: 'font-semibold flex-1 truncate', text: seatLabel(seat) + (seat.isBot ? ' 🤖' : '') }));
     })),
@@ -1869,6 +2065,61 @@ function loadScript(src) {
 }
 const randomId = (n = 16) => [...crypto.getRandomValues(new Uint8Array(n))].map(x => x.toString(16).padStart(2, '0')).join('');
 const randomCode = () => [...crypto.getRandomValues(new Uint8Array(4))].map(x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('');
+// Cada troca de anfitrião abre a sala num ID novo: CODE, CODE-h1, CODE-h2…
+const peerIdFor = (code, epoch = 0) => PEER_PREFIX + code + (epoch ? '-h' + epoch : '');
+const MIGRATE_AFTER_MS = 15000;
+
+async function sha256hex(text) {
+  try {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2, '0')).join('');
+  } catch { return null; } // sem contexto seguro (HTTPS/localhost)
+}
+
+// Verifica se existe alguém atendendo num ID de peer
+function probePeer(id, ms = 6000) {
+  return new Promise(resolve => {
+    let peer;
+    try { peer = new Peer({ config: { iceServers: ICE_SERVERS } }); } catch { resolve(false); return; }
+    const done = (v) => { clearTimeout(timer); try { peer.destroy(); } catch { /* ignore */ } resolve(v); };
+    const timer = setTimeout(() => done(false), ms);
+    peer.on('open', () => {
+      const c = peer.connect(id, { reliable: true, serialization: 'json' });
+      c.on('open', () => done(true));
+    });
+    peer.on('error', () => done(false));
+  });
+}
+
+// O anfitrião antigo (ou um sucessor atrasado) vira convidado de quem assumiu.
+function becomeClientOf(lobby, epoch) {
+  const me = lobby.members.find(m => m.id === Net.myId) || lobby.members.find(m => m.isHost);
+  Store.del('ludo:host:' + lobby.code);
+  Store.del('ludo:lastHost');
+  if (me && me.token) Store.set('ludo:session:' + lobby.code, { token: me.token, epoch });
+  clearTimers();
+  Game.busy = false;
+  hideConnecting();
+  toast('Outro jogador está com a sala — reconectando…');
+  joinRoom(lobby.code, epoch);
+}
+
+// Sucessor assume com o último estado recebido do anfitrião que caiu.
+function promoteToHost() {
+  const lobby = JSON.parse(JSON.stringify(Net.lobby));
+  const st = Game.state ? JSON.parse(JSON.stringify(Game.state)) : null;
+  lobby.epoch = (lobby.epoch || 0) + 1;
+  lobby.members.forEach(m => {
+    if (m.isHost) { m.isHost = false; m.connected = false; }
+    if (m.id === Net.myId) { m.isHost = true; m.token = Net.myToken; m.ready = true; m.connected = true; }
+  });
+  const inGame = lobby.phase === 'game' && st && st.phase !== 'finished';
+  if (st) st.config = Object.assign({ mode: 'online', speed: 'normal' }, st.config);
+  Store.del('ludo:session:' + lobby.code);
+  toast('O anfitrião caiu — você assumiu a sala.');
+  hostRoom({ lobby, state: inGame ? st : null }, { takeover: true });
+}
+
 function safeAvatar(a) {
   if (typeof a !== 'string') return '🙂';
   if (a.startsWith('data:image/jpeg;base64,') && a.length < 40000) return a;
@@ -1893,7 +2144,8 @@ const Net = {
   role: null, peer: null, code: null, myId: null, myToken: null, spectator: false,
   lobby: null, conns: new Map(), conn: null, connected: false, everConnected: false,
   pending: false, pendingTimer: null, offset: 0, lastPong: 0, hb: null,
-  reconnTimer: null, retry: 0, closing: false, chain: Promise.resolve(),
+  reconnTimer: null, retry: 0, closing: false, chain: Promise.resolve(), emoteAt: new Map(),
+  epoch: 0, lostAt: null,
 
   // ----- anfitrião -----
   publicState() {
@@ -2017,17 +2269,26 @@ function netFail(err) {
 }
 
 // ---------- Anfitrião ----------
-async function hostRoom(restore) {
+// restore: { lobby, state } salvo (recarga) ou herdado (takeover = troca de anfitrião)
+async function hostRoom(restore, { takeover = false } = {}) {
   try { if (!window.Peer) await loadScript(PEERJS_URL); } catch (e) { netFail(e); return; }
   if (Net.role) netShutdown();
   netReset();
   Net.role = 'host';
   let code = restore ? restore.lobby.code : randomCode();
-  showConnecting(restore ? 'Reabrindo a sala…' : 'Criando sala…');
+  const epoch = restore ? (restore.lobby.epoch || 0) : 0;
+  showConnecting(takeover ? 'Assumindo a sala…' : restore ? 'Reabrindo a sala…' : 'Criando sala…');
+
+  // Recarga do anfitrião: se outro jogador já assumiu a sala, entra como convidado.
+  if (restore && !takeover && await probePeer(peerIdFor(code, epoch + 1))) {
+    becomeClientOf(restore.lobby, epoch + 1);
+    return;
+  }
+  if (Net.closing) return;
 
   const open = () => new Promise((resolve, reject) => {
     let peer;
-    try { peer = new Peer(PEER_PREFIX + code, { config: { iceServers: ICE_SERVERS } }); } catch (e) { reject(e); return; }
+    try { peer = new Peer(peerIdFor(code, epoch), { config: { iceServers: ICE_SERVERS } }); } catch (e) { reject(e); return; }
     let opened = false;
     peer.on('open', () => { opened = true; resolve(peer); });
     peer.on('error', err => {
@@ -2039,6 +2300,7 @@ async function hostRoom(restore) {
     try { Net.peer = await open(); break; } catch (err) {
       if (Net.closing) return;
       if (err && err.type === 'unavailable-id') {
+        if (takeover) { becomeClientOf(restore.lobby, epoch); return; } // outro sucessor chegou antes
         if (!restore && attempt < 5) { code = randomCode(); continue; }
         if (restore && attempt < 10) { await wait(3000); continue; } // o servidor ainda segura o ID antigo
       }
@@ -2058,13 +2320,14 @@ async function hostRoom(restore) {
     const me = Net.lobby.members.find(m => m.isHost);
     Net.myId = me.id;
   } else {
+    const token = randomId();
     const me = {
-      id: randomId(8), token: randomId(), name: cleanName(profile.name) || 'Anfitrião', avatar: profile.avatar,
+      id: randomId(8), token, tokenHash: await sha256hex(token), name: cleanName(profile.name) || 'Anfitrião', avatar: profile.avatar,
       color: 'red', ready: true, isHost: true, isBot: false, connected: true,
     };
     Net.myId = me.id;
     Net.lobby = {
-      code, phase: 'lobby', members: [me],
+      code, epoch: 0, phase: 'lobby', members: [me],
       rules: Object.assign(defaultRuleToggles(), Store.get('ludo:onlineRules', {})),
       time: Object.assign({ timer: true, seconds: 20 }, Store.get('ludo:onlineTime', {})),
     };
@@ -2107,7 +2370,7 @@ function hostHandle(conn, msg) {
   if (info) info.lastSeen = Date.now();
   const p = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
   if (msg.type === 'PING') { sendTo(conn, { type: 'PONG', payload: { t: p.t, hostTime: Date.now() } }); return; }
-  if (msg.type === 'JOIN' || msg.type === 'REJOIN') { hostJoin(conn, msg.type, p); return; }
+  if (msg.type === 'JOIN' || msg.type === 'REJOIN') { hostJoin(conn, msg.type, p).catch(e => console.error(e)); return; }
   if (!info) return;
   const L = Net.lobby;
   const member = info.memberId ? L.members.find(m => m.id === info.memberId) : null;
@@ -2128,6 +2391,13 @@ function hostHandle(conn, msg) {
     case 'LEAVE':
       hostDrop(conn, true);
       break;
+    case 'EMOTE': {
+      const seat = member && Game.state && L.phase === 'game' ? Game.state.seats.find(x => x.owner === member.id) : null;
+      if (!seat || !EMOTES.includes(p.emoji) || Date.now() - (Net.emoteAt.get(member.id) || 0) < EMOTE_COOLDOWN - 300) break;
+      Net.emoteAt.set(member.id, Date.now());
+      hostEmote(seat.seat, p.emoji);
+      break;
+    }
     case 'ROLL_REQUEST':
     case 'MOVE_REQUEST':
       if (member) hostIntent(conn, member, msg);
@@ -2146,10 +2416,19 @@ function pickSeatForNewcomer() {
   return bot.color;
 }
 
-function hostJoin(conn, type, p) {
+async function hostJoin(conn, type, p) {
   const L = Net.lobby;
-  let member = type === 'REJOIN' && typeof p.token === 'string'
-    ? L.members.find(m => !m.isBot && !m.isHost && m.token === p.token) : null;
+  let member = null;
+  if (type === 'REJOIN' && typeof p.token === 'string') {
+    const others = L.members.filter(m => !m.isBot && m.id !== Net.myId);
+    member = others.find(m => m.token && m.token === p.token) || null;
+    if (!member) {
+      // Depois de uma troca de anfitrião só temos o hash do token de cada jogador
+      const hash = await sha256hex(p.token);
+      member = hash ? others.find(m => m.tokenHash === hash) || null : null;
+      if (member) member.token = p.token;
+    }
+  }
   if (!member) {
     const color = L.phase === 'lobby' ? pickSeatForNewcomer() : null;
     if (!color) {
@@ -2160,8 +2439,9 @@ function hostJoin(conn, type, p) {
       return;
     }
     const humans = L.members.filter(m => !m.isBot).length;
+    const token = randomId();
     member = {
-      id: randomId(8), token: randomId(), name: cleanName(String(p.name || '')) || `Jogador ${humans + 1}`,
+      id: randomId(8), token, tokenHash: await sha256hex(token), name: cleanName(String(p.name || '')) || `Jogador ${humans + 1}`,
       avatar: safeAvatar(p.avatar), color, ready: false, isHost: false, isBot: false, connected: true,
     };
     L.members.push(member);
@@ -2258,7 +2538,7 @@ function hostBackToLobby() {
 }
 
 // ---------- Convidado ----------
-async function joinRoom(code) {
+async function joinRoom(code, epoch) {
   code = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
   if (code.length !== 4) { toast('O código tem 4 caracteres.'); return; }
   try { if (!window.Peer) await loadScript(PEERJS_URL); } catch (e) { netFail(e); return; }
@@ -2266,7 +2546,9 @@ async function joinRoom(code) {
   netReset();
   Net.role = 'client';
   Net.code = code;
-  Net.myToken = (Store.get('ludo:session:' + code, null) || {}).token || null;
+  const session = Store.get('ludo:session:' + code, null) || {};
+  Net.myToken = session.token || null;
+  Net.epoch = epoch != null ? epoch : (session.epoch || 0);
   setRoomUrl(code);
   showConnecting('Conectando à sala ' + code + '…');
   clientConnect();
@@ -2277,13 +2559,24 @@ async function joinRoom(code) {
 function clientConnect() {
   if (Net.closing || Net.role !== 'client') return;
   Net.reconnTimer = null;
+  // Anfitrião sumiu há tempo demais: o próximo jogador na ordem dos assentos assume.
+  if (Net.everConnected && Net.lostAt && Net.lobby && !Net.spectator) {
+    const lostFor = Date.now() - Net.lostAt;
+    const successors = Net.lobby.members
+      .filter(m => !m.isBot && !m.isHost && m.connected)
+      .sort((a, b) => E.COLORS.indexOf(a.color) - E.COLORS.indexOf(b.color));
+    const rank = successors.findIndex(m => m.id === Net.myId);
+    if (rank >= 0 && lostFor > MIGRATE_AFTER_MS * (rank + 1)) { promoteToHost(); return; }
+  }
+  // Durante a queda alterna entre o anfitrião atual e um possível sucessor
+  const target = Net.lostAt && Net.retry % 2 === 1 ? Net.epoch + 1 : Net.epoch;
   try { Net.peer && Net.peer.destroy(); } catch { /* ignore */ }
   let peer;
   try { peer = new Peer({ config: { iceServers: ICE_SERVERS } }); } catch (e) { netFail(e); return; }
   Net.peer = peer;
   peer.on('open', () => {
     if (Net.peer !== peer) return;
-    const conn = peer.connect(PEER_PREFIX + Net.code, { reliable: true, serialization: 'json' });
+    const conn = peer.connect(peerIdFor(Net.code, target), { reliable: true, serialization: 'json' });
     Net.conn = conn;
     const timeout = setTimeout(() => { if (Net.conn === conn && !conn.open) clientLost(); }, 12000);
     conn.on('open', () => {
@@ -2291,6 +2584,8 @@ function clientConnect() {
       Net.connected = true;
       Net.lastPong = Date.now();
       Net.retry = 0;
+      Net.lostAt = null;
+      Net.epoch = target;
       $('#net-banner').hidden = true;
       const who = { name: cleanName(profile.name), avatar: profile.avatar };
       Net.send(Net.myToken ? { type: 'REJOIN', payload: { token: Net.myToken, ...who } } : { type: 'JOIN', payload: who });
@@ -2302,6 +2597,11 @@ function clientConnect() {
   });
   peer.on('error', err => {
     if (Net.peer !== peer) return;
+    if (!Net.everConnected && err.type === 'peer-unavailable' && Net.epoch < 3) {
+      Net.epoch++; // a sala pode ter trocado de anfitrião
+      clientConnect();
+      return;
+    }
     if (!Net.everConnected && (err.type === 'peer-unavailable' || err.type === 'browser-incompatible')) { netFail(err); return; }
     clientLost();
   });
@@ -2312,6 +2612,7 @@ function clientLost() {
   Net.connected = false;
   Net.conn = null;
   Net.pending = false;
+  if (Net.everConnected && !Net.lostAt) Net.lostAt = Date.now();
   if (Net.everConnected) {
     $('#net-banner').hidden = false;
     if (Game.state) render();
@@ -2338,11 +2639,13 @@ function clientHandle(msg) {
       Net.everConnected = true;
       Net.spectator = !!p.spectator;
       Net.myId = p.id;
-      if (p.token) { Net.myToken = p.token; Store.set('ludo:session:' + Net.code, { token: p.token }); }
+      if (p.token) { Net.myToken = p.token; Store.set('ludo:session:' + Net.code, { token: p.token, epoch: Net.epoch }); }
       if (p.spectator) toast(p.reason === 'ROOM_FULL' ? 'Sala cheia — você está assistindo.' : 'Partida em andamento — você está assistindo.');
       break;
     case 'LOBBY':
       Net.lobby = p.lobby;
+      Net.epoch = p.lobby.epoch || 0;
+      if (Net.myToken) Store.set('ludo:session:' + Net.code, { token: Net.myToken, epoch: Net.epoch });
       enqueue(clientOnLobby);
       break;
     case 'STATE':
@@ -2355,6 +2658,9 @@ function clientHandle(msg) {
       Net.pending = false;
       if (p.reason !== 'stale') toast('Jogada não permitida agora.');
       if (Game.state) render();
+      break;
+    case 'EMOTE':
+      showEmote(p.seat, p.emoji);
       break;
     case 'PONG': {
       const now = Date.now();
@@ -2437,8 +2743,15 @@ async function clientApplyAction(events, state) {
   if (state.phase === 'finished') showResults();
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || Net.role !== 'client') return;
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  if (Net.role === 'host' && Net.lobby) {
+    // O aparelho dormiu? Se alguém assumiu a sala nesse meio-tempo, vira convidado.
+    const lobby = Net.lobby;
+    if (await probePeer(peerIdFor(lobby.code, (lobby.epoch || 0) + 1), 4000) && Net.role === 'host') becomeClientOf(lobby, (lobby.epoch || 0) + 1);
+    return;
+  }
+  if (Net.role !== 'client') return;
   if (Net.connected) Net.send({ type: 'SYNC_REQUEST' });
   else { clearTimeout(Net.reconnTimer); Net.reconnTimer = null; clientConnect(); }
 });
@@ -2597,7 +2910,7 @@ document.addEventListener('keydown', e => {
   const n = Number(e.key);
   if (n >= 1 && n <= 4) {
     const s = Game.state;
-    if (s.phase === 'playing' && canPick(currentSeat().color, n - 1)) actMove(n - 1);
+    if (s.phase === 'playing' && canPick(E.playColor(s, s.turn.seat), n - 1)) actMove(n - 1);
   }
 });
 
