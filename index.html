@@ -550,16 +550,16 @@
 
         peer.on('error', (err) => {
           console.warn("PeerJS Warning/Error:", err);
-          // Fallback gracioso para salas em ambientes com restrição de Canvas/iFrame (WebSockets bloqueados)
-          if (!currentGameState) {
-            if (callback) callback();
-          } else {
-            console.log("Modo de jogo local/offline ativado para este ambiente.");
+          // Fallback gracioso caso a conexão P2P externa falhe no ambiente atual
+          if (callback) {
+            const cb = callback;
+            callback = null;
+            cb();
           }
         });
       } catch (err) {
         console.warn("PeerJS Initialization Exception (Canvas Sandbox Fallback):", err);
-        // Em ambientes restritos que bloqueiam totalmente o WebSocket do PeerJS, executa o callback localmente
+        peer = null;
         if (callback) callback();
       }
     }
@@ -671,29 +671,69 @@
       isHost = false;
 
       initPeer(myId, () => {
-        const hostPeerId = 'ludo-room-' + roomCode;
-        const conn = peer.connect(hostPeerId);
-
-        conn.on('open', () => {
-          connections.push(conn);
-          conn.send({
-            type: 'JOIN_REQUEST',
-            player: {
-              id: myId,
-              name: username,
-              avatar: userAvatarBase64
+        // Se o peer não puder ser inicializado devido a restrições do navegador/sandbox
+        if (!peer) {
+          console.warn("Modo P2P indisponível neste ambiente. Inicializando sala em modo de teste local.");
+          currentGameState = {
+            code: roomCode,
+            status: 'waiting',
+            currentTurnIndex: 0,
+            diceValue: null,
+            hasRolled: false,
+            turnTimeLeft: 40,
+            winner: null,
+            players: [
+              {
+                id: myId,
+                name: username,
+                avatar: userAvatarBase64,
+                color: PLAYER_COLORS[0]
+              }
+            ],
+            pawns: {
+              red: [-1, -1, -1, -1],
+              green: [-1, -1, -1, -1],
+              yellow: [-1, -1, -1, -1],
+              blue: [-1, -1, -1, -1]
             }
-          });
+          };
           switchToGameScreen();
-        });
+          renderGameState(currentGameState);
+          return;
+        }
 
-        conn.on('data', (data) => {
-          handlePeerData(data, conn);
-        });
+        const hostPeerId = 'ludo-room-' + roomCode;
+        try {
+          const conn = peer.connect(hostPeerId);
 
-        conn.on('error', (err) => {
-          showMsgModal('Erro de Conexão', 'Não foi possível conectar à sala especificada.');
-        });
+          if (!conn) {
+            throw new Error("Conexão nula retornada");
+          }
+
+          conn.on('open', () => {
+            connections.push(conn);
+            conn.send({
+              type: 'JOIN_REQUEST',
+              player: {
+                id: myId,
+                name: username,
+                avatar: userAvatarBase64
+              }
+            });
+            switchToGameScreen();
+          });
+
+          conn.on('data', (data) => {
+            handlePeerData(data, conn);
+          });
+
+          conn.on('error', (err) => {
+            showMsgModal('Erro de Conexão', 'Não foi possível conectar à sala especificada.');
+          });
+        } catch(e) {
+          console.warn("Erro ao tentar conectar via Peer:", e);
+          switchToGameScreen();
+        }
       });
     }
 
@@ -701,8 +741,9 @@
       document.getElementById('lobby-screen').classList.add('hidden');
       document.getElementById('game-screen').classList.remove('hidden');
       document.getElementById('display-room-code').innerText = roomCode;
-      generateQRCode();
     }
+
+    // --- REGRAS E LÓGICA DO LUDO ---
 
     function startGame() {
       if (!isHost || !currentGameState) return;
@@ -714,23 +755,21 @@
       currentGameState.hasRolled = false;
       currentGameState.turnTimeLeft = 40;
 
-      localStats.matches++;
+      localStats.matches += 1;
       saveStats();
 
       broadcastState(currentGameState);
     }
 
-    // --- REGRAS DO JOGO & JOGADAS ---
-
     function rollDice() {
       if (!currentGameState || currentGameState.status !== 'playing') return;
-      
-      const currentPlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (currentPlayer.id !== myId && !isHost) return;
+
+      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      if (!activePlayer || activePlayer.id !== myId) return;
       if (currentGameState.hasRolled) return;
 
       if (!isHost) {
-        connections[0].send({ type: 'ROLL_DICE', playerId: myId });
+        connections[0]?.send({ type: 'ROLL_DICE' });
         return;
       }
 
@@ -738,89 +777,89 @@
     }
 
     function executeRollDice() {
-      const diceContainer = document.getElementById('dice-container');
-      diceContainer.classList.add('dice-rolling');
+      const val = Math.floor(Math.random() * 6) + 1;
+      currentGameState.diceValue = val;
+      currentGameState.hasRolled = true;
 
-      setTimeout(() => {
-        diceContainer.classList.remove('dice-rolling');
-        const roll = Math.floor(Math.random() * 6) + 1;
-        currentGameState.diceValue = roll;
-        currentGameState.hasRolled = true;
+      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      const validMoves = getValidMoves(activePlayer.color, val);
 
-        const activeColor = currentGameState.players[currentGameState.currentTurnIndex].color;
-        const validMoves = getValidMoves(activeColor, roll);
+      if (validMoves.length === 0) {
+        setTimeout(() => {
+          nextTurn();
+        }, 1200);
+      }
 
-        if (validMoves.length === 0) {
-          // Nenhuma jogada possível: passa a vez após breve pausa
-          setTimeout(() => {
-            nextTurn();
-          }, 1200);
-        }
-
-        broadcastState(currentGameState);
-      }, 400);
+      broadcastState(currentGameState);
     }
 
     function getValidMoves(color, diceVal) {
-      const positions = currentGameState.pawns[color];
+      const pawns = currentGameState.pawns[color];
       const moves = [];
 
-      positions.forEach((pos, idx) => {
-        if (pos === -1 && diceVal === 6) {
-          moves.push(idx); // Pode sair da base
-        } else if (pos >= 0 && pos + diceVal <= 56) {
-          moves.push(idx); // Movimento válido no circuito
+      pawns.forEach((pos, index) => {
+        if (pos === -1) {
+          if (diceVal === 6) moves.push(index);
+        } else if (pos >= 0 && pos < 56) {
+          if (pos + diceVal <= 56) moves.push(index);
         }
       });
 
       return moves;
     }
 
-    function movePawn(pawnIndex) {
-      if (!currentGameState || !currentGameState.hasRolled) return;
+    function selectPawnToMove(pawnIndex) {
+      if (!currentGameState || currentGameState.status !== 'playing') return;
+      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+      if (!activePlayer || activePlayer.id !== myId || !currentGameState.hasRolled) return;
 
-      const currentPlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (currentPlayer.id !== myId && !isHost) return;
+      const validMoves = getValidMoves(activePlayer.color, currentGameState.diceValue);
+      if (!validMoves.includes(pawnIndex)) return;
 
       if (!isHost) {
-        connections[0].send({ type: 'MOVE_PAWN', playerId: myId, pawnIndex: pawnIndex });
+        connections[0]?.send({ type: 'MOVE_PAWN', pawnIndex: pawnIndex });
         return;
       }
 
-      executeMovePawn(currentPlayer.color, pawnIndex, currentGameState.diceValue);
+      executeMovePawn(activePlayer.color, pawnIndex);
     }
 
-    function executeMovePawn(color, pawnIndex, diceVal) {
-      let currentPos = currentGameState.pawns[color][pawnIndex];
+    function executeMovePawn(color, pawnIndex) {
+      const diceVal = currentGameState.diceValue;
+      let pos = currentGameState.pawns[color][pawnIndex];
 
-      if (currentPos === -1 && diceVal === 6) {
+      if (pos === -1 && diceVal === 6) {
         currentGameState.pawns[color][pawnIndex] = 0;
-      } else if (currentPos >= 0) {
-        const nextPos = currentPos + diceVal;
-        if (nextPos <= 56) {
-          currentGameState.pawns[color][pawnIndex] = nextPos;
-          checkCaptures(color, nextPos);
-        }
+      } else if (pos >= 0) {
+        currentGameState.pawns[color][pawnIndex] += diceVal;
       }
 
-      // Condição de Vitória (todos os 4 peões na casa 56)
-      if (currentGameState.pawns[color].every(p => p === 56)) {
-        currentGameState.winner = currentPlayerName();
-        currentGameState.status = 'finished';
-        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+      const newPos = currentGameState.pawns[color][pawnIndex];
 
-        if (currentGameState.players[currentGameState.currentTurnIndex].id === myId) {
-          localStats.victories++;
+      // Verificação de Captura se a casa não for final nem casa segura (star)
+      if (newPos > 0 && newPos < 51) {
+        checkCaptures(color, newPos);
+      }
+
+      // Checar Vitória
+      if (currentGameState.pawns[color].every(p => p === 56)) {
+        currentGameState.status = 'finished';
+        currentGameState.winner = currentGameState.players[currentGameState.currentTurnIndex];
+        
+        if (currentGameState.winner.id === myId) {
+          localStats.victories += 1;
           saveStats();
         }
 
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         broadcastState(currentGameState);
         return;
       }
 
-      // Se tirar 6, joga novamente; caso contrário, passa a vez
+      // Se tirou 6, ganha outro turno!
       if (diceVal === 6) {
         currentGameState.hasRolled = false;
+        currentGameState.diceValue = null;
         currentGameState.turnTimeLeft = 40;
         broadcastState(currentGameState);
       } else {
@@ -828,26 +867,21 @@
       }
     }
 
-    function checkCaptures(moverColor, pathIndex) {
-      if (pathIndex > 51) return; // Reta final é segura
+    function checkCaptures(currentColor, relativePos) {
+      const targetCoords = getAbsoluteCoords(currentColor, relativePos);
+      const isSafe = SAFE_POSITIONS.some(([r, c]) => r === targetCoords[0] && c === targetCoords[1]);
+      if (isSafe) return;
 
-      const absCoords = getAbsoluteCoords(moverColor, pathIndex);
-      if (SAFE_POSITIONS.some(([r, c]) => r === absCoords[0] && c === absCoords[1])) {
-        return; // Casa segura (estrela)
-      }
-
-      // Verifica peões de outras cores na mesma coordenada
-      Object.keys(currentGameState.pawns).forEach(color => {
-        if (color === moverColor) return;
-
-        currentGameState.pawns[color].forEach((pos, idx) => {
-          if (pos >= 0 && pos <= 51) {
-            const enemyCoords = getAbsoluteCoords(color, pos);
-            if (enemyCoords[0] === absCoords[0] && enemyCoords[1] === absCoords[1]) {
-              // Peão capturado! Retorna para a base (-1)
-              currentGameState.pawns[color][idx] = -1;
-              if (currentGameState.players[currentGameState.currentTurnIndex].id === myId) {
-                localStats.captures++;
+      PLAYER_COLORS.forEach(c => {
+        if (c === currentColor) return;
+        currentGameState.pawns[c].forEach((pPos, idx) => {
+          if (pPos >= 0 && pPos < 51) {
+            const pCoords = getAbsoluteCoords(c, pPos);
+            if (pCoords[0] === targetCoords[0] && pCoords[1] === targetCoords[1]) {
+              // Peão capturado volta para a base!
+              currentGameState.pawns[c][idx] = -1;
+              if (currentGameState.players[currentGameState.currentTurnIndex]?.id === myId) {
+                localStats.captures += 1;
                 saveStats();
               }
             }
@@ -856,16 +890,13 @@
       });
     }
 
-    function getAbsoluteCoords(color, pathIndex) {
-      if (pathIndex === -1) return null;
-
-      if (pathIndex <= 50) {
-        const offset = START_INDEX[color];
-        const globalIdx = (pathIndex + offset) % 52;
+    function getAbsoluteCoords(color, relPos) {
+      if (relPos === -1) return null;
+      if (relPos < 51) {
+        const globalIdx = (START_INDEX[color] + relPos) % MAIN_CIRCUIT.length;
         return MAIN_CIRCUIT[globalIdx];
       } else {
-        // Reta Final
-        const homeIdx = pathIndex - 51;
+        const homeIdx = relPos - 51;
         return HOME_STRETCH[color][homeIdx];
       }
     }
@@ -878,18 +909,18 @@
       broadcastState(currentGameState);
     }
 
-    function processPlayerAction(action) {
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (activePlayer.id !== action.playerId) return;
-
-      if (action.type === 'ROLL_DICE' && !currentGameState.hasRolled) {
-        executeRollDice();
-      } else if (action.type === 'MOVE_PAWN' && currentGameState.hasRolled) {
-        executeMovePawn(activePlayer.color, action.pawnIndex, currentGameState.diceValue);
+    function processPlayerAction(data) {
+      if (data.type === 'ROLL_DICE') {
+        if (!currentGameState.hasRolled) executeRollDice();
+      } else if (data.type === 'MOVE_PAWN') {
+        const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+        if (currentGameState.hasRolled) {
+          executeMovePawn(activePlayer.color, data.pawnIndex);
+        }
       }
     }
 
-    // --- TIMERS & AUTO-PLAY DE 40s ---
+    // --- TIMER DE 40s E JOGADA AUTOMÁTICA ---
 
     function startTimerLoop() {
       if (turnTimerInterval) clearInterval(turnTimerInterval);
@@ -897,29 +928,28 @@
       turnTimerInterval = setInterval(() => {
         if (!isHost || !currentGameState || currentGameState.status !== 'playing') return;
 
-        currentGameState.turnTimeLeft--;
+        currentGameState.turnTimeLeft -= 1;
 
         if (currentGameState.turnTimeLeft <= 0) {
-          // Tempo Esgotado: Jogada Automática
-          const activeColor = currentGameState.players[currentGameState.currentTurnIndex].color;
-          
+          const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
+
           if (!currentGameState.hasRolled) {
-            const roll = Math.floor(Math.random() * 6) + 1;
-            currentGameState.diceValue = roll;
+            const val = Math.floor(Math.random() * 6) + 1;
+            currentGameState.diceValue = val;
             currentGameState.hasRolled = true;
 
-            const validMoves = getValidMoves(activeColor, roll);
+            const validMoves = getValidMoves(activePlayer.color, val);
             if (validMoves.length > 0) {
               const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
-              executeMovePawn(activeColor, randomPawn, roll);
+              executeMovePawn(activePlayer.color, randomPawn);
             } else {
               nextTurn();
             }
           } else {
-            const validMoves = getValidMoves(activeColor, currentGameState.diceValue);
+            const validMoves = getValidMoves(activePlayer.color, currentGameState.diceValue);
             if (validMoves.length > 0) {
               const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
-              executeMovePawn(activeColor, randomPawn, currentGameState.diceValue);
+              executeMovePawn(activePlayer.color, randomPawn);
             } else {
               nextTurn();
             }
@@ -930,188 +960,181 @@
       }, 1000);
     }
 
-    // --- RENDERIZAÇÃO DA INTERFACE & TABULEIRO ---
+    // --- RENDERIZAÇÃO DA INTERFACE NATIVA ---
 
     function renderGameState(state) {
       if (!state) return;
 
-      // Atualiza lista de jogadores
-      const playersListDOM = document.getElementById('players-list');
-      playersListDOM.innerHTML = '';
+      // Renderizar Código da Sala
+      document.getElementById('display-room-code').innerText = state.code;
+
+      // Renderizar Jogadores na Lista
+      const playersList = document.getElementById('players-list');
       document.getElementById('player-count').innerText = state.players.length;
+      
+      const badge = document.getElementById('room-status-badge');
+      if (state.status === 'waiting') {
+        badge.innerText = 'Aguardando';
+        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      } else if (state.status === 'playing') {
+        badge.innerText = 'Em Jogo';
+        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      } else {
+        badge.innerText = 'Finalizado';
+        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30';
+      }
 
-      const activePlayer = state.players[state.currentTurnIndex];
-      const isMyTurn = activePlayer && activePlayer.id === myId;
-
-      state.players.forEach((p, idx) => {
-        const isTurn = idx === state.currentTurnIndex && state.status === 'playing';
-        const card = document.createElement('div');
-        card.className = `flex items-center justify-between p-2.5 rounded-xl border transition ${
-          isTurn ? 'bg-indigo-900/40 border-indigo-500 shadow-md' : 'bg-slate-900/60 border-slate-700/60'
-        }`;
-
-        card.innerHTML = `
-          <div class="flex items-center space-x-3">
-            <div class="relative">
-              <img src="${p.avatar}" class="w-8 h-8 rounded-full object-cover border-2" style="border-color: ${p.color};"/>
-              ${isTurn ? '<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span></span>' : ''}
-            </div>
-            <div>
-              <div class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <span>${p.name}</span>
-                ${p.id === myId ? '<span class="text-[9px] bg-slate-700 text-indigo-300 px-1.5 py-0.2 rounded font-normal">Você</span>' : ''}
+      playersList.innerHTML = state.players.map((p, idx) => {
+        const isCurrentTurn = state.status === 'playing' && idx === state.currentTurnIndex;
+        return `
+          <div class="flex items-center justify-between p-2 rounded-xl border ${isCurrentTurn ? 'bg-indigo-900/40 border-indigo-500 ring-2 ring-indigo-500/30' : 'bg-slate-900/60 border-slate-700/60'} transition">
+            <div class="flex items-center space-x-2.5">
+              <img src="${p.avatar}" class="w-8 h-8 rounded-full object-cover border border-slate-600"/>
+              <div>
+                <span class="text-xs font-bold text-white block leading-tight">${p.name} ${p.id === myId ? '(Você)' : ''}</span>
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-${p.color}-400">${COLOR_NAMES[p.color]}</span>
               </div>
-              <span class="text-[10px] uppercase font-semibold tracking-wider" style="color: ${p.color}">${COLOR_NAMES[p.color]}</span>
             </div>
+            ${isCurrentTurn ? '<span class="text-xs font-black text-amber-400 animate-pulse"><i class="fa-solid fa-play"></i></span>' : ''}
           </div>
         `;
-        playersListDOM.appendChild(card);
-      });
+      }).join('');
 
-      // Botão de Iniciar Partida (Apenas Host)
+      // Exibir botão de início para o Host
       const btnStart = document.getElementById('btn-start-game');
-      const roomBadge = document.getElementById('room-status-badge');
-
-      if (state.status === 'waiting') {
-        roomBadge.innerText = 'Aguardando';
-        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
-        if (isHost) {
-          btnStart.classList.remove('hidden');
-        } else {
-          btnStart.classList.add('hidden');
-        }
-      } else if (state.status === 'playing') {
-        roomBadge.innerText = 'Em Jogo';
-        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-        btnStart.classList.add('hidden');
-      } else if (state.status === 'finished') {
-        roomBadge.innerText = 'Finalizada';
-        roomBadge.className = 'px-2 py-0.5 rounded text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+      if (isHost && state.status === 'waiting') {
+        btnStart.classList.remove('hidden');
+      } else {
         btnStart.classList.add('hidden');
       }
 
-      // Painel de Dado e Descrição
+      // Atualizar Timer
+      const timerText = document.getElementById('timer-text');
+      const timerBar = document.getElementById('timer-bar');
+      const timeLeft = state.turnTimeLeft || 40;
+      timerText.innerText = `${timeLeft}s`;
+      timerBar.style.width = `${(timeLeft / 40) * 100}%`;
+
+      // Atualizar Dado
+      const diceContainer = document.getElementById('dice-container');
+      const diceValueEl = document.getElementById('dice-value');
       const btnRoll = document.getElementById('btn-roll-dice');
-      const turnDesc = document.getElementById('status-turn-desc');
-      const diceValContainer = document.getElementById('dice-value');
+      const statusTurnDesc = document.getElementById('status-turn-desc');
 
       if (state.diceValue) {
-        diceValContainer.innerText = state.diceValue;
+        const diceIcons = ['', 'fa-dice-one', 'fa-dice-two', 'fa-dice-three', 'fa-dice-four', 'fa-dice-five', 'fa-dice-six'];
+        diceValueEl.innerHTML = `<i class="fa-solid ${diceIcons[state.diceValue]}"></i>`;
       } else {
-        diceValContainer.innerHTML = `<i class="fa-solid fa-dice-d6"></i>`;
+        diceValueEl.innerHTML = `<i class="fa-solid fa-dice-d6"></i>`;
       }
 
-      if (state.status === 'playing') {
-        if (isMyTurn) {
-          turnDesc.innerText = state.hasRolled ? 'Clique em um peão para mover' : 'Sua vez! Jogue o dado.';
-          turnDesc.className = 'text-xs text-indigo-400 font-bold animate-pulse mb-2';
+      const activePlayer = state.players[state.currentTurnIndex];
+      if (state.status === 'playing' && activePlayer) {
+        if (activePlayer.id === myId) {
+          statusTurnDesc.innerText = state.hasRolled ? 'Escolha um peão para mover!' : 'Sua vez de jogar!';
           btnRoll.disabled = state.hasRolled;
         } else {
-          turnDesc.innerText = `Vez de ${activePlayer ? activePlayer.name : '...'}`;
-          turnDesc.className = 'text-xs text-slate-400 font-medium mb-2';
+          statusTurnDesc.innerText = `Vez de ${activePlayer.name}...`;
           btnRoll.disabled = true;
         }
       } else if (state.status === 'finished') {
-        turnDesc.innerText = `🏆 Vitória de ${state.winner}!`;
-        turnDesc.className = 'text-xs text-amber-400 font-bold mb-2';
+        statusTurnDesc.innerText = `🎉 Vitória de ${state.winner?.name}!`;
         btnRoll.disabled = true;
       }
 
-      // Timer
-      const timerBar = document.getElementById('timer-bar');
-      const timerText = document.getElementById('timer-text');
-      const pct = Math.max(0, (state.turnTimeLeft / 40) * 100);
-      timerBar.style.width = `${pct}%`;
-      timerText.innerText = `${state.turnTimeLeft}s`;
-
-      // Renderiza Peões no Tabuleiro
+      // Renderizar Peões no Tabuleiro
       renderPawnsOnBoard(state);
     }
 
     function renderPawnsOnBoard(state) {
-      // Limpa peões anteriores das células
-      document.querySelectorAll('.cell .pawn').forEach(el => el.remove());
+      // Limpar peões anteriores
+      document.querySelectorAll('.pawn').forEach(el => el.remove());
+
+      if (!state || !state.pawns) return;
 
       const activePlayer = state.players[state.currentTurnIndex];
-      const isMyTurn = activePlayer && activePlayer.id === myId;
-      const validPawnsToMove = (isMyTurn && state.hasRolled) ? getValidMoves(activePlayer.color, state.diceValue) : [];
+      const isMyTurn = activePlayer && activePlayer.id === myId && state.hasRolled;
+      const validMoves = isMyTurn ? getValidMoves(activePlayer.color, state.diceValue) : [];
 
-      state.players.forEach(player => {
-        const color = player.color;
-        const positions = state.pawns[color];
+      PLAYER_COLORS.forEach(color => {
+        const playerObj = state.players.find(p => p.color === color);
+        const avatarSrc = playerObj ? playerObj.avatar : userAvatarBase64;
+        const pawnPositions = state.pawns[color];
 
-        positions.forEach((pos, pawnIdx) => {
+        pawnPositions.forEach((pos, pawnIndex) => {
           let targetCellId = null;
 
           if (pos === -1) {
-            // Na Base
-            const coords = HOME_BASE_COORDS[color][pawnIdx];
-            targetCellId = `cell-${coords[0]}-${coords[1]}`;
+            const [r, c] = HOME_BASE_COORDS[color][pawnIndex];
+            targetCellId = `cell-${r}-${c}`;
           } else {
-            // No Circuito
             const coords = getAbsoluteCoords(color, pos);
-            if (coords) targetCellId = `cell-${coords[0]}-${coords[1]}`;
+            if (coords) {
+              targetCellId = `cell-${coords[0]}-${coords[1]}`;
+            }
           }
 
           if (targetCellId) {
             const cell = document.getElementById(targetCellId);
             if (cell) {
-              const pawn = document.createElement('div');
-              pawn.className = `pawn bg-${color}-home`;
-
-              if (isMyTurn && player.color === activePlayer.color && validPawnsToMove.includes(pawnIdx)) {
-                pawn.classList.add('movable');
-                pawn.onclick = (e) => {
+              const pawnEl = document.createElement('div');
+              pawnEl.className = `pawn bg-${color}-home`;
+              
+              if (isMyTurn && activePlayer.color === color && validMoves.includes(pawnIndex)) {
+                pawnEl.classList.add('movable');
+                pawnEl.onclick = (e) => {
                   e.stopPropagation();
-                  movePawn(pawnIdx);
+                  selectPawnToMove(pawnIndex);
                 };
               }
 
-              pawn.innerHTML = `<img src="${player.avatar}" class="pawn-avatar" />`;
-              cell.appendChild(pawn);
+              pawnEl.innerHTML = `<img src="${avatarSrc}" class="pawn-avatar"/>`;
+              cell.appendChild(pawnEl);
             }
           }
         });
       });
     }
 
-    function currentPlayerName() {
-      if (!currentGameState) return '';
-      const p = currentGameState.players[currentGameState.currentTurnIndex];
-      return p ? p.name : '';
-    }
-
     // --- MODAIS E UTILITÁRIOS ---
 
-    function generateQRCode() {
-      const qrContainer = document.getElementById('qrcode-container');
-      qrContainer.innerHTML = '';
-      const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
-      document.getElementById('qr-room-link').innerText = joinUrl;
+    function toggleQRModal() {
+      const modal = document.getElementById('qr-modal');
+      const isHidden = modal.classList.contains('hidden');
+      if (isHidden) {
+        modal.classList.remove('hidden');
+        generateQRCode();
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
 
-      new QRCode(qrContainer, {
-        text: joinUrl,
+    function generateQRCode() {
+      const container = document.getElementById('qrcode-container');
+      container.innerHTML = '';
+      const roomUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+      document.getElementById('qr-room-link').innerText = roomUrl;
+
+      new QRCode(container, {
+        text: roomUrl,
         width: 160,
-        height: 160
+        height: 160,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff"
       });
     }
 
     function copyRoomLink() {
-      const joinUrl = window.location.origin + window.location.pathname + '?room=' + roomCode;
+      const roomUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
       
       const tempInput = document.createElement('input');
-      tempInput.value = joinUrl;
+      tempInput.value = roomUrl;
       document.body.appendChild(tempInput);
       tempInput.select();
       document.execCommand('copy');
       document.body.removeChild(tempInput);
 
-      showMsgModal('Link Copiado!', 'O link da sala foi copiado para sua área de transferência.');
-    }
-
-    function toggleQRModal() {
-      const modal = document.getElementById('qr-modal');
-      modal.classList.toggle('hidden');
+      showMsgModal('Link Copiado!', 'O link da sala foi copiado para a área de transferência.');
     }
 
     function toggleStatsModal() {
