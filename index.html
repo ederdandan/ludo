@@ -1,1156 +1,1821 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Ludo Supreme Multiplayer (P2P)</title>
-  
-  <!-- Tailwind CSS CDN para estilização fluida -->
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ludo Supreme</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='2' height='2' fill='%23e53935'/%3E%3Crect x='2' width='2' height='2' fill='%232e9e4f'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23f4b400'/%3E%3Crect y='2' width='2' height='2' fill='%231e88e5'/%3E%3C/svg%3E">
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
+<style>
+  :root {
+    --red: #e53935; --red-l: #ffd5d3;
+    --green: #2e9e4f; --green-l: #cdeed6;
+    --yellow: #f4b400; --yellow-l: #fff1bf;
+    --blue: #1e88e5; --blue-l: #d0e6fb;
+    --cell: #fbfaf6; --line: #cfd6e0;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #1e293b 0%, #0f172a 60%, #0b1120 100%) fixed;
+    color: #e2e8f0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .screen[hidden] { display: none !important; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .6rem 1.1rem; border-radius: .9rem; font-weight: 600; transition: transform .1s, background .2s, opacity .2s; }
+  .btn:active:not(:disabled) { transform: scale(.97); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; box-shadow: 0 8px 20px rgba(239, 68, 68, .3); }
+  .btn-ghost { background: rgba(148, 163, 184, .12); color: #e2e8f0; }
+  .btn-ghost:hover:not(:disabled) { background: rgba(148, 163, 184, .22); }
+  .icon-btn { width: 44px; height: 44px; border-radius: .8rem; display: inline-flex; align-items: center; justify-content: center; background: rgba(148, 163, 184, .12); color: #e2e8f0; }
+  .icon-btn:hover { background: rgba(148, 163, 184, .24); }
+  .card { background: rgba(30, 41, 59, .75); border: 1px solid rgba(148, 163, 184, .15); border-radius: 1.1rem; padding: 1rem; }
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; background: rgba(15, 23, 42, .6); padding: 4px; border-radius: .8rem; }
+  .seg button { min-height: 40px; min-width: 44px; padding: .4rem .9rem; border-radius: .6rem; font-weight: 600; color: #cbd5e1; }
+  .seg button[aria-pressed="true"] { background: #f8fafc; color: #0f172a; }
+  .color-chip { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; border: 3px solid transparent; }
+  .color-chip[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .25); }
+  input[type="text"] { background: rgba(15, 23, 42, .7); border: 1px solid rgba(148, 163, 184, .3); border-radius: .7rem; padding: .55rem .8rem; color: #f8fafc; min-height: 44px; }
+  input[type="checkbox"] { width: 20px; height: 20px; accent-color: #f59e0b; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #f8fafc; font-size: 22px; overflow: hidden; flex: none; border: 3px solid var(--c, #94a3b8); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-  <!-- FontAwesome Icons (SVG / Font) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-  
-  <!-- QRCode.js para gerar código QR do link -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  /* ---------- Tabuleiro ---------- */
+  .board-wrap { position: relative; width: min(calc(100vw - 16px), max(300px, calc(100dvh - 270px)), 680px); aspect-ratio: 1; margin: 0 auto; container-type: inline-size; }
+  @media (min-width: 1024px) { .board-wrap { width: min(calc(100vw - 400px), calc(100dvh - 130px), 760px); } }
+  .board { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr); background: var(--cell); border-radius: 2cqw; overflow: hidden; border: .6cqw solid #1e293b; box-shadow: 0 20px 50px rgba(0, 0, 0, .5); }
+  .cell { border: 1px solid var(--line); background: var(--cell); display: flex; align-items: center; justify-content: center; font-size: 3.2cqw; line-height: 1; color: #94a3b8; user-select: none; transition: background .15s, box-shadow .15s; }
+  .cell.star { color: #64748b; }
+  .cell.home { background: var(--c); color: rgba(255, 255, 255, .55); font-size: 2.4cqw; }
+  .cell.start { background: var(--c); color: #fff; }
+  .cell.preview { background: #fde047 !important; box-shadow: inset 0 0 0 .5cqw #0f172a; color: #0f172a; }
+  .base { position: relative; background: var(--c); }
+  .base-inner { position: absolute; inset: 8.33%; background: #fff; border-radius: 12%; box-shadow: inset 0 0 0 .5cqw rgba(0, 0, 0, .06); }
+  .slot { position: absolute; width: 26%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%); background: var(--cl); border: .5cqw solid var(--c); }
+  .base-label { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 70%; text-align: center; font-size: 2.2cqw; font-weight: 700; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  .base-label.turn { color: var(--c); }
+  .base-sym { position: absolute; font-size: 2.6cqw; color: rgba(255, 255, 255, .9); line-height: 1; }
+  .center { grid-row: 7 / 10; grid-column: 7 / 10; position: relative; }
+  .center svg { width: 100%; height: 100%; display: block; }
+  .center polygon.preview { fill: #fde047 !important; }
+  .tokens { position: absolute; inset: 0; pointer-events: none; }
+  .token { position: absolute; width: 5.3cqw; height: 5.3cqw; margin: -2.65cqw 0 0 -2.65cqw; transform: scale(var(--s, 1)); transition: left var(--t, 110ms) linear, top var(--t, 110ms) linear, transform .2s, opacity .2s; pointer-events: auto; border-radius: 50%; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .token::before { content: ""; position: absolute; inset: -1.3cqw; border-radius: 50%; }
+  .tk-body { position: relative; width: 100%; height: 100%; border-radius: 50%; background: #fff; border: .85cqw solid var(--c); box-shadow: 0 .45cqw .9cqw rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 2.6cqw; line-height: 1; }
+  .tk-body img { width: 100%; height: 100%; object-fit: cover; }
+  .tk-sym { position: absolute; right: -.7cqw; bottom: -.7cqw; width: 2.3cqw; height: 2.3cqw; border-radius: 50%; background: var(--c); color: #fff; font-size: 1.4cqw; display: flex; align-items: center; justify-content: center; border: .25cqw solid #fff; line-height: 1; }
+  .tk-count { position: absolute; top: -1.1cqw; right: -1.3cqw; background: #0f172a; color: #fff; font-size: 1.7cqw; padding: .1cqw .5cqw; border-radius: 1cqw; font-weight: 800; display: none; line-height: 1.3; }
+  .tk-count.on { display: block; }
+  .token.valid { cursor: pointer; }
+  .token.valid .tk-body { animation: pulse .9s ease-in-out infinite; }
+  .token.dim { opacity: .5; }
+  .token.returning { --t: 450ms; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(15, 23, 42, .85), 0 .45cqw .9cqw rgba(0, 0, 0, .45); }
+    50% { box-shadow: 0 0 0 1.1cqw rgba(15, 23, 42, 0), 0 .45cqw .9cqw rgba(0, 0, 0, .45); }
+  }
+  .turn-banner { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.9); padding: 3cqw 5cqw; border-radius: 3cqw; background: rgba(15, 23, 42, .92); color: #fff; font-size: 5cqw; font-weight: 800; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; white-space: nowrap; border: .6cqw solid var(--c, #fff); }
+  .turn-banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
-  <!-- Canvas Confetti para efeitos visuais de vitória -->
-  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  /* ---------- Dado ---------- */
+  .die { width: 68px; height: 68px; background: #fff; border-radius: 16px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 10px; box-shadow: 0 6px 0 #cbd5e1, 0 12px 24px rgba(0, 0, 0, .35); border: 3px solid var(--c, #e2e8f0); transition: border-color .2s; }
+  .die.small { width: 44px; height: 44px; padding: 6px; border-radius: 10px; box-shadow: 0 3px 0 #cbd5e1; }
+  .die .pip { width: 100%; height: 100%; border-radius: 50%; background: #0f172a; transform: scale(.72); visibility: hidden; }
+  .die.rolling { animation: shake .35s linear infinite; }
+  @keyframes shake { 0% { transform: rotate(0) } 25% { transform: rotate(-14deg) translateY(-3px) } 50% { transform: rotate(0) } 75% { transform: rotate(14deg) translateY(-3px) } }
+  .die-btn { border-radius: 18px; padding: 4px; }
+  .die-btn:not(:disabled) .die { cursor: pointer; animation: bob 1.2s ease-in-out infinite; }
+  .die-btn:disabled { cursor: default; }
+  @keyframes bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
 
-  <!-- PeerJS: WebRTC Peer-to-Peer sem servidores de terceiros ou Google Auth -->
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  /* ---------- Layout do jogo ---------- */
+  .game-layout { display: flex; flex-direction: column; gap: 10px; padding: 0 8px 16px; max-width: 1240px; margin: 0 auto; }
+  .side { display: flex; flex-direction: column; gap: 10px; }
+  @media (min-width: 1024px) { .game-layout { flex-direction: row; align-items: flex-start; justify-content: center; } .side { width: 330px; flex: none; } }
+  .status { border-left: 5px solid var(--c, #64748b); }
+  .player-row { display: flex; align-items: center; gap: .6rem; padding: .45rem .55rem; border-radius: .8rem; border: 2px solid transparent; }
+  .player-row.current { border-color: var(--c); background: rgba(255, 255, 255, .06); }
+  .player-row.done { opacity: .75; }
+  .badge { font-size: .7rem; font-weight: 700; padding: .1rem .45rem; border-radius: 999px; background: rgba(148, 163, 184, .2); }
+  .modal-back { position: fixed; inset: 0; background: rgba(2, 6, 23, .72); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; backdrop-filter: blur(3px); }
+  .modal-box { background: #1e293b; border: 1px solid rgba(148, 163, 184, .2); border-radius: 1.2rem; padding: 1.3rem; width: 100%; max-width: 440px; max-height: calc(100dvh - 32px); overflow: auto; box-shadow: 0 30px 60px rgba(0, 0, 0, .5); }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #f8fafc; color: #0f172a; padding: .7rem 1.1rem; border-radius: .8rem; font-weight: 600; z-index: 200; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); max-width: calc(100vw - 32px); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap');
-    
-    body {
-      font-family: 'Outfit', sans-serif;
-      background-color: #0f172a;
-      color: #f8fafc;
-      user-select: none;
-      min-height: 100vh;
-    }
-
-    /* Tabuleiro 15x15 Responsivo */
-    .board-grid {
-      display: grid;
-      grid-template-columns: repeat(15, minmax(0, 1fr));
-      grid-template-rows: repeat(15, minmax(0, 1fr));
-      aspect-ratio: 1 / 1;
-      width: 100%;
-      max-width: 600px;
-      margin: 0 auto;
-      border: 4px solid #1e293b;
-      border-radius: 1rem;
-      overflow: hidden;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-      background-color: #ffffff;
-    }
-
-    .cell {
-      border: 1px solid #cbd5e1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      background-color: #fff;
-    }
-
-    /* Zonas e cores das 4 casas do Ludo */
-    .bg-red-home { background-color: #ef4444; }
-    .bg-green-home { background-color: #22c55e; }
-    .bg-yellow-home { background-color: #eab308; }
-    .bg-blue-home { background-color: #3b82f6; }
-
-    .bg-red-path { background-color: #fca5a5; }
-    .bg-green-path { background-color: #86efac; }
-    .bg-yellow-path { background-color: #fde047; }
-    .bg-blue-path { background-color: #93c5fd; }
-
-    .bg-star {
-      background-color: #f1f5f9;
-      position: relative;
-    }
-    .bg-star::after {
-      content: "★";
-      font-size: 1rem;
-      color: #94a3b8;
-    }
-
-    /* Visual dos Peões */
-    .pawn {
-      width: 78%;
-      height: 78%;
-      border-radius: 50%;
-      border: 2px solid white;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-      cursor: pointer;
-      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .pawn.movable {
-      animation: pulse-pawn 1s infinite alternate;
-      cursor: pointer;
-      transform: scale(1.2);
-      z-index: 20;
-    }
-
-    @keyframes pulse-pawn {
-      0% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.9); }
-      100% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0), 0 0 18px rgba(255, 255, 255, 0.6); }
-    }
-
-    .pawn-avatar {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-
-    /* Animação 3D de Rolar o Dado */
-    .dice-rolling {
-      animation: roll 0.4s ease-out infinite;
-    }
-    @keyframes roll {
-      0% { transform: rotate(0deg) scale(0.9); }
-      50% { transform: rotate(180deg) scale(1.1); }
-      100% { transform: rotate(360deg) scale(0.9); }
-    }
-  </style>
+  @media (prefers-reduced-motion: reduce) {
+    .token, .cell, .turn-banner { transition: none !important; }
+    .token.valid .tk-body { animation: none; box-shadow: 0 0 0 .9cqw rgba(15, 23, 42, .85); }
+    .die.rolling, .die-btn:not(:disabled) .die { animation: none; }
+  }
+</style>
 </head>
-<body class="flex flex-col justify-between">
-
-  <!-- Cabeçalho Principal -->
-  <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-    <div class="flex items-center space-x-3">
-      <div class="bg-gradient-to-tr from-red-500 via-yellow-500 to-blue-500 p-2 rounded-xl text-white shadow-lg">
-        <i class="fa-solid fa-dice text-xl"></i>
-      </div>
-      <div>
-        <h1 class="font-bold text-lg leading-none bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Ludo P2P Web</h1>
-        <span class="text-xs text-slate-400 font-medium">100% HTML, CSS & JavaScript Puro (WebRTC)</span>
-      </div>
-    </div>
-
-    <div class="flex items-center space-x-3">
-      <button onclick="toggleStatsModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 transition">
-        <i class="fa-solid fa-trophy text-amber-400"></i> Estatísticas
-      </button>
-      <div class="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
-        <img id="header-avatar" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzNiODJmNiIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iMzgiIHI9IjIwIiBmaWxsPSIjZmZmZmZmIi8+PHBhdGggZD0iTSAyMCA4NSBDIDIwIDY1LCA4MCA2NSwgODAgODUgWiIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==" class="w-6 h-6 rounded-full object-cover border border-slate-600"/>
-        <span id="header-name" class="text-xs font-semibold text-slate-200 max-w-[90px] truncate">Jogador</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Área Central -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
-
-    <!-- LOBBY / CONFIGURAÇÃO DE ENTRADA -->
-    <section id="lobby-screen" class="w-full max-w-md bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-2xl backdrop-blur-sm my-auto">
-      <div class="text-center mb-6">
-        <h2 class="text-2xl font-bold text-white mb-1">Criar ou Entrar na Sala</h2>
-        <p class="text-slate-400 text-xs">Jogue com até 4 pessoas via conexão direta sem login ou cadastros!</p>
-      </div>
-
-      <div class="space-y-4 mb-6">
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome / Apelido</label>
-          <input type="text" id="input-username" maxlength="12" placeholder="Digite seu nome..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"/>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Foto de Perfil (Opcional)</label>
-          <div class="flex items-center space-x-3">
-            <img id="avatar-preview" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzNiODJmNiIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iMzgiIHI9IjIwIiBmaWxsPSIjZmZmZmZmIi8+PHBhdGggZD0iTSAyMCA4NSBDIDIwIDY1LCA4MCA2NSwgODAgODUgWiIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==" class="w-12 h-12 rounded-full object-cover border-2 border-indigo-500 shadow"/>
-            <input type="file" id="input-avatar" accept="image/*" class="hidden" onchange="handleAvatarUpload(event)"/>
-            <button onclick="document.getElementById('input-avatar').click()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-2.5 rounded-xl border border-slate-600 transition font-medium">
-              <i class="fa-solid fa-upload mr-1"></i> Carregar Imagem
-            </button>
-          </div>
+<body>
+<div id="app">
+  <section id="screen-home" class="screen"></section>
+  <section id="screen-setup" class="screen" hidden></section>
+  <section id="screen-game" class="screen" hidden>
+    <header class="flex items-center gap-2 px-2 py-2 max-w-[1240px] mx-auto">
+      <button class="icon-btn" id="btn-exit" aria-label="Voltar ao menu"><i class="fa-solid fa-arrow-left"></i></button>
+      <div class="font-extrabold tracking-tight text-lg ml-1" id="game-title">Ludo Supreme</div>
+      <div class="flex-1"></div>
+      <button class="icon-btn" id="btn-rules" aria-label="Regras desta partida"><i class="fa-solid fa-circle-info"></i></button>
+      <button class="icon-btn" id="btn-pause" aria-label="Pausar"><i class="fa-solid fa-pause"></i></button>
+      <button class="icon-btn" id="btn-mute" aria-label="Som"><i class="fa-solid fa-volume-high"></i></button>
+    </header>
+    <div class="game-layout">
+      <div class="flex flex-col gap-2 min-w-0">
+        <div id="status" class="status card py-2 px-3 text-sm sm:text-base font-medium" aria-live="polite"></div>
+        <div class="board-wrap">
+          <div id="board" class="board"></div>
+          <div id="tokens" class="tokens"></div>
+          <div id="turn-banner" class="turn-banner"></div>
         </div>
       </div>
-
-      <!-- Ações -->
-      <div class="space-y-3 pt-4 border-t border-slate-700/60">
-        <button onclick="createRoom()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2">
-          <i class="fa-solid fa-plus-circle"></i> Criar Nova Sala
-        </button>
-
-        <div class="relative flex py-2 items-center">
-          <div class="flex-grow border-t border-slate-700"></div>
-          <span class="flex-shrink mx-3 text-slate-500 text-xs">OU ENTRAR COM CÓDIGO</span>
-          <div class="flex-grow border-t border-slate-700"></div>
-        </div>
-
-        <div class="flex gap-2">
-          <input type="text" id="input-room-code" maxlength="4" placeholder="CÓDIGO (EX: LUDO)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-center font-mono uppercase tracking-widest text-white focus:outline-none focus:border-indigo-500"/>
-          <button onclick="joinRoom()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-lg shadow-emerald-600/30">
-            Entrar
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- TELA DE JOGO -->
-    <section id="game-screen" class="hidden w-full flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
-
-      <!-- TABULEIRO DO LUDO -->
-      <div class="w-full max-w-[600px] flex flex-col items-center">
-        <div id="board" class="board-grid"></div>
-      </div>
-
-      <!-- PAINEL DE CONTROLE LATERAL -->
-      <div class="w-full lg:w-80 flex flex-col gap-4">
-        
-        <!-- Status da Sala e QR Code -->
-        <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl">
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <span class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Código da Sala</span>
-              <div id="display-room-code" class="text-2xl font-black font-mono text-indigo-400 tracking-wider">----</div>
-            </div>
-            <div class="flex gap-1.5">
-              <button onclick="copyRoomLink()" title="Copiar Link" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition text-xs">
-                <i class="fa-solid fa-copy"></i>
-              </button>
-              <button onclick="toggleQRModal()" title="Ver QR Code" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition text-xs">
-                <i class="fa-solid fa-qrcode"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Timer de Turno de 40s -->
-          <div class="space-y-1">
-            <div class="flex justify-between text-xs font-semibold">
-              <span class="text-slate-400">Tempo do Turno</span>
-              <span id="timer-text" class="text-amber-400 font-mono">40s</span>
-            </div>
-            <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700">
-              <div id="timer-bar" class="bg-amber-400 h-full w-full transition-all ease-linear duration-1000"></div>
+      <aside class="side">
+        <div class="card flex items-center gap-4">
+          <button id="die-btn" class="die-btn" aria-label="Rolar o dado (Espaço)"></button>
+          <div class="flex-1 min-w-0">
+            <div id="die-hint" class="text-sm text-slate-300"></div>
+            <div id="sixes" class="text-lg tracking-widest text-amber-400 mt-1" aria-label="Seis consecutivos"></div>
+            <div id="timer-wrap" class="mt-2" hidden>
+              <div class="h-2 rounded-full bg-slate-700 overflow-hidden"><div id="timer-fill" class="h-full bg-amber-400" style="width:100%"></div></div>
+              <div id="timer-text" class="text-xs text-slate-400 mt-1"></div>
             </div>
           </div>
         </div>
-
-        <!-- Rolagem do Dado -->
-        <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl text-center">
-          <div class="text-xs text-slate-400 mb-2 font-medium" id="status-turn-desc">Aguardando início...</div>
-          
-          <div class="flex items-center justify-center gap-4 my-2">
-            <div id="dice-container" class="w-16 h-16 bg-slate-900 border-2 border-indigo-500/50 rounded-2xl flex items-center justify-center shadow-inner text-3xl font-black text-indigo-400">
-              <span id="dice-value"><i class="fa-solid fa-dice-d6"></i></span>
-            </div>
-
-            <button id="btn-roll-dice" onclick="rollDice()" disabled class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">
-              JOGAR DADO
-            </button>
-          </div>
-        </div>
-
-        <!-- Lista de Jogadores -->
-        <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl flex-1">
-          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between items-center">
-            <span>Jogadores (<span id="player-count">0</span>/4)</span>
-            <span id="room-status-badge" class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Aguardando</span>
-          </h3>
-
-          <div id="players-list" class="space-y-2.5"></div>
-
-          <button id="btn-start-game" onclick="startGame()" class="hidden w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition shadow-lg">
-            Iniciar Partida
-          </button>
-        </div>
-
-      </div>
-    </section>
-  </main>
-
-  <!-- Rodapé -->
-  <footer class="bg-slate-900 border-t border-slate-800 py-3 text-center text-xs text-slate-500">
-    Ludo Supreme Web &bull; Desenvolvido com HTML5, CSS3 e JS (WebRTC PeerJS)
-  </footer>
-
-  <!-- MODAIS -->
-
-  <!-- Modal QR Code -->
-  <div id="qr-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
-      <h3 class="text-lg font-bold text-white">Convidar Jogadores</h3>
-      <p class="text-xs text-slate-400">Escaneie o código com a câmera para entrar na sala:</p>
-      
-      <div class="bg-white p-4 rounded-xl inline-block shadow-inner">
-        <div id="qrcode-container"></div>
-      </div>
-
-      <div class="text-xs font-mono bg-slate-900 py-2 rounded-lg text-indigo-300 border border-slate-700 flex justify-between px-3 items-center">
-        <span id="qr-room-link" class="truncate max-w-[200px]">http://...</span>
-        <button onclick="copyRoomLink()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-copy"></i></button>
-      </div>
-
-      <button onclick="toggleQRModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-xl transition text-sm">
-        Fechar
-      </button>
+        <div class="card"><div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Jogadores</div><div id="players" class="flex flex-col gap-1"></div></div>
+        <div class="card"><div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Últimas jogadas</div><ul id="history" class="text-sm text-slate-300 flex flex-col gap-1"></ul></div>
+      </aside>
     </div>
-  </div>
+  </section>
+</div>
+<div id="modal-root"></div>
 
-  <!-- Modal Estatísticas -->
-  <div id="stats-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-      <div class="flex justify-between items-center">
-        <h3 class="text-lg font-bold text-white">Estatísticas Salvas</h3>
-        <button onclick="toggleStatsModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
-      </div>
+<script>
+// ENGINE-START
+/* Motor de regras puro (sem DOM). O mesmo motor servirá ao Host online. */
+const LudoEngine = (() => {
+  'use strict';
+  const COLORS = ['red', 'green', 'yellow', 'blue'];
+  const OFFSET = { red: 0, green: 13, yellow: 26, blue: 39 };
+  const TEAM = { red: 0, yellow: 0, green: 1, blue: 1 };
+  const SAFE = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
+  const LAST_MAIN = 50;
+  const GOAL = 56;
+  const TRACK = [
+    [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [5, 6], [4, 6], [3, 6], [2, 6], [1, 6], [0, 6], [0, 7], [0, 8],
+    [1, 8], [2, 8], [3, 8], [4, 8], [5, 8], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [7, 14], [8, 14],
+    [8, 13], [8, 12], [8, 11], [8, 10], [8, 9], [9, 8], [10, 8], [11, 8], [12, 8], [13, 8], [14, 8], [14, 7], [14, 6],
+    [13, 6], [12, 6], [11, 6], [10, 6], [9, 6], [8, 5], [8, 4], [8, 3], [8, 2], [8, 1], [8, 0], [7, 0], [6, 0],
+  ];
+  const HOME = {
+    red: [[7, 1], [7, 2], [7, 3], [7, 4], [7, 5]],
+    green: [[1, 7], [2, 7], [3, 7], [4, 7], [5, 7]],
+    yellow: [[7, 13], [7, 12], [7, 11], [7, 10], [7, 9]],
+    blue: [[13, 7], [12, 7], [11, 7], [10, 7], [9, 7]],
+  };
+  const BASE_ORIGIN = { red: [0, 0], green: [0, 9], yellow: [9, 9], blue: [9, 0] };
+  const BASE_SLOTS = [[1, 1], [1, 4], [4, 1], [4, 4]];
+  // Centro de cada triângulo de chegada, em coordenadas de casa [linha, coluna]
+  const GOAL_POINT = { red: [7.5, 6.5], green: [6.5, 7.5], yellow: [7.5, 8.5], blue: [8.5, 7.5] };
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 text-center">
-          <span class="text-2xl font-black text-indigo-400" id="stat-matches">0</span>
-          <span class="block text-[11px] text-slate-400 font-medium mt-1">Partidas Jogadas</span>
-        </div>
-        <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 text-center">
-          <span class="text-2xl font-black text-emerald-400" id="stat-victories">0</span>
-          <span class="block text-[11px] text-slate-400 font-medium mt-1">Vitórias</span>
-        </div>
-      </div>
+  const DEFAULT_RULES = {
+    exitOn: [6], blocks: false, captureBonus: true, finishBonus: true,
+    threeSixesLimit: true, threeSixesPenalty: false, exactFinish: true,
+    endOnFirstWinner: false, teams: false, autoSingleMove: true,
+    quickMode: false, turnSeconds: 20,
+  };
 
-      <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 text-center">
-        <span class="text-2xl font-black text-amber-400" id="stat-captures">0</span>
-        <span class="block text-[11px] text-slate-400 font-medium mt-1">Peões Capturados</span>
-      </div>
+  // Pesos do bot Difícil (seção 5.10.3)
+  const HARD_WEIGHTS = {
+    capture: 100, finish: 80, enterHome: 60, exitBase: 50, safe: 30, barrier: 25,
+    progress: 1, threatened: -40, leaveSafeToThreat: -20, othersThreatened: -10,
+  };
 
-      <button onclick="toggleStatsModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl transition text-sm">
-        Fechar
-      </button>
-    </div>
-  </div>
+  const absPos = (color, rel) => (rel >= 0 && rel <= LAST_MAIN) ? (rel + OFFSET[color]) % 52 : null;
 
-  <!-- Modal Avisos -->
-  <div id="msg-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-xs w-full text-center space-y-3 shadow-2xl">
-      <div id="msg-icon" class="text-3xl text-indigo-400"><i class="fa-solid fa-circle-info"></i></div>
-      <h4 id="msg-title" class="text-base font-bold text-white">Aviso</h4>
-      <p id="msg-body" class="text-xs text-slate-300">Mensagem do sistema.</p>
-      <button onclick="closeMsgModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-xl text-xs transition">
-        OK
-      </button>
-    </div>
-  </div>
+  function cryptoRng() {
+    const buf = new Uint8Array(1);
+    let x;
+    do { globalThis.crypto.getRandomValues(buf); x = buf[0]; } while (x >= 252); // sem viés de módulo
+    return (x % 6) + 1;
+  }
 
-  <!-- LÓGICA DO JOGO EM JAVASCRIPT PURO -->
-  <script>
-    // --- ESTADO GLOBAL DO JOGO ---
-    let myId = 'usr_' + Math.random().toString(36).substring(2, 8);
-    let peer = null;
-    let connections = []; // Conexões WebRTC PeerJS
-    let isHost = false;
-    let roomCode = null;
-    let currentGameState = null;
-    let turnTimerInterval = null;
-    let userAvatarBase64 = null;
-    let localStats = { matches: 0, victories: 0, captures: 0 };
+  function pointOf(color, rel, idx) {
+    if (rel < 0) {
+      const [r0, c0] = BASE_ORIGIN[color];
+      const [r, c] = BASE_SLOTS[idx];
+      return [r0 + r + 0.5, c0 + c + 0.5];
+    }
+    if (rel <= LAST_MAIN) { const [r, c] = TRACK[absPos(color, rel)]; return [r + 0.5, c + 0.5]; }
+    if (rel < GOAL) { const [r, c] = HOME[color][rel - 51]; return [r + 0.5, c + 0.5]; }
+    return GOAL_POINT[color];
+  }
 
-    const PLAYER_COLORS = ['red', 'green', 'yellow', 'blue'];
-    const COLOR_NAMES = { red: 'Vermelho', green: 'Verde', yellow: 'Amarelo', blue: 'Azul' };
+  // Cores na mesa no Modo Solo: 1 adversário fica na cor oposta; 2 ou 3 seguem o sentido horário.
+  function seatColorsFor(playerColor, opponents) {
+    const i = COLORS.indexOf(playerColor);
+    if (opponents === 1) return [playerColor, COLORS[(i + 2) % 4]];
+    return Array.from({ length: opponents + 1 }, (_, k) => COLORS[(i + k) % 4]);
+  }
 
-    // Circuito Principal (15x15)
-    const MAIN_CIRCUIT = [
-      [6,1], [6,2], [6,3], [6,4], [6,5],
-      [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],
-      [0,7],
-      [0,8], [1,8], [2,8], [3,8], [4,8], [5,8],
-      [6,9], [6,10], [6,11], [6,12], [6,13], [6,14],
-      [7,14],
-      [8,14], [8,13], [8,12], [8,11], [8,10], [8,9],
-      [9,8], [10,8], [11,8], [12,8], [13,8], [14,8],
-      [14,7],
-      [14,6], [13,6], [12,6], [11,6], [10,6], [9,6],
-      [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],
-      [7,0], [6,0]
-    ];
+  // Distribuição padrão por número de jogadores (seção 4.1)
+  function defaultColorsFor(n) {
+    if (n === 2) return ['red', 'yellow'];
+    if (n === 3) return ['red', 'green', 'yellow'];
+    return COLORS.slice();
+  }
 
-    const START_INDEX = { red: 0, green: 13, yellow: 26, blue: 39 };
+  const colorsInPlay = (state) => state.seats.map(s => s.color);
+  const isOpponent = (state, a, b) => a !== b && !(state.rules.teams && TEAM[a] === TEAM[b]);
 
-    const HOME_STRETCH = {
-      red: [[7,1], [7,2], [7,3], [7,4], [7,5], [7,6]],
-      green: [[1,7], [2,7], [3,7], [4,7], [5,7], [6,7]],
-      yellow: [[7,13], [7,12], [7,11], [7,10], [7,9], [7,7]],
-      blue: [[13,7], [12,7], [11,7], [10,7], [9,7], [8,7]]
+  function createGame({ mode = 'solo', players, rules = {} }) {
+    const r = { ...DEFAULT_RULES, ...rules };
+    const seats = players.slice()
+      .sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color))
+      .map((p, i) => ({
+        seat: i, color: p.color, name: p.name, avatar: p.avatar || null,
+        isBot: !!p.isBot, botLevel: p.isBot ? (p.botLevel || 'medium') : null,
+        connected: true, afk: false, finishedRank: null, timeouts: 0,
+      }));
+    const pieces = {};
+    for (const s of seats) pieces[s.color] = r.quickMode ? [0, -1, -1, -1] : [-1, -1, -1, -1];
+    return {
+      stateVersion: 0, mode, phase: 'choosingFirst', rules: r, seats, pieces,
+      turn: freshTurn(0), turnNumber: 0, ranking: [], lastEvents: [], log: [],
     };
+  }
 
-    const HOME_BASE_COORDS = {
-      red: [[2,2], [2,3], [3,2], [3,3]],
-      green: [[2,11], [2,12], [3,11], [3,12]],
-      yellow: [[11,11], [11,12], [12,11], [12,12]],
-      blue: [[11,2], [11,3], [12,2], [12,3]]
+  function freshTurn(seat) {
+    return { seat, awaiting: 'roll', dice: null, consecutiveSixes: 0, validMoves: [], lastSixPiece: null, deadline: null };
+  }
+
+  function bump(state, events) {
+    state.stateVersion++;
+    state.lastEvents = events;
+  }
+
+  // Sorteio de quem começa: maior valor; empatados no maior rolam de novo entre si.
+  function chooseFirst(state, rng = cryptoRng) {
+    let contenders = state.seats.map(s => s.seat);
+    const rounds = [];
+    let winner;
+    for (;;) {
+      const round = contenders.map(seat => ({ seat, value: rng() }));
+      rounds.push(round);
+      const max = Math.max(...round.map(x => x.value));
+      const top = round.filter(x => x.value === max).map(x => x.seat);
+      if (top.length === 1) { winner = top[0]; break; }
+      contenders = top;
+    }
+    state.phase = 'playing';
+    state.turn = freshTurn(winner);
+    state.turnNumber = 1;
+    const events = [{ kind: 'FIRST', rounds, winner }, { kind: 'TURN', seat: winner }];
+    bump(state, events);
+    return { rounds, winner, events };
+  }
+
+  function opponentBarrierAt(state, color, abs) {
+    for (const c of colorsInPlay(state)) {
+      if (!isOpponent(state, color, c)) continue;
+      let n = 0;
+      for (const r of state.pieces[c]) if (r >= 0 && r <= LAST_MAIN && absPos(c, r) === abs) n++;
+      if (n >= 2) return true;
+    }
+    return false;
+  }
+
+  function computeValidMoves(state, color, dice) {
+    const rules = state.rules;
+    const res = [];
+    state.pieces[color].forEach((rel, i) => {
+      if (rel === GOAL) return;
+      if (rel < 0) {
+        if (!rules.exitOn.includes(dice)) return;
+        if (rules.blocks && opponentBarrierAt(state, color, OFFSET[color])) return;
+        res.push(i);
+        return;
+      }
+      let target = rel + dice;
+      if (target > GOAL) {
+        if (rules.exactFinish) return;
+        target = GOAL;
+      }
+      if (rules.blocks) {
+        for (let p = rel + 1; p <= Math.min(target, LAST_MAIN); p++) {
+          if (opponentBarrierAt(state, color, absPos(color, p))) return;
+        }
+      }
+      res.push(i);
+    });
+    return res;
+  }
+
+  function unfinishedSeats(state) {
+    return state.seats.filter(s => s.finishedRank == null);
+  }
+
+  function nextTurn(state, events) {
+    const n = state.seats.length;
+    let seat = state.turn.seat;
+    for (let k = 1; k <= n; k++) {
+      const cand = (state.turn.seat + k) % n;
+      if (state.seats[cand].finishedRank == null) { seat = cand; break; }
+    }
+    state.turn = freshTurn(seat);
+    state.turnNumber++;
+    events.push({ kind: 'TURN', seat });
+  }
+
+  const progressOf = (state, color) => state.pieces[color].reduce((a, r) => a + r + 1, 0);
+
+  function finishGame(state, events) {
+    const rest = unfinishedSeats(state)
+      .sort((a, b) => progressOf(state, b.color) - progressOf(state, a.color));
+    for (const s of rest) {
+      state.ranking.push(s.seat);
+      s.finishedRank = state.ranking.length;
+    }
+    state.phase = 'finished';
+    state.turn.awaiting = null;
+    state.turn.validMoves = [];
+    events.push({ kind: 'GAME_OVER', ranking: state.ranking.slice() });
+  }
+
+  function roll(state, rng = cryptoRng) {
+    const t = state.turn;
+    if (state.phase !== 'playing' || t.awaiting !== 'roll') return null;
+    const seat = state.seats[t.seat];
+    const color = seat.color;
+    const dice = rng();
+    t.dice = dice;
+    t.deadline = null;
+    const events = [{ kind: 'ROLL', seat: t.seat, color, value: dice }];
+    t.consecutiveSixes = dice === 6 ? t.consecutiveSixes + 1 : 0;
+
+    if (state.rules.threeSixesLimit && t.consecutiveSixes >= 3) {
+      let penalty = null;
+      if (state.rules.threeSixesPenalty && t.lastSixPiece != null) {
+        const rel = state.pieces[color][t.lastSixPiece];
+        if (rel >= 0 && rel <= LAST_MAIN) {
+          state.pieces[color][t.lastSixPiece] = -1;
+          penalty = { color, piece: t.lastSixPiece, from: rel };
+        }
+      }
+      events.push({ kind: 'THREE_SIXES', seat: t.seat, color, penalty });
+      nextTurn(state, events);
+      bump(state, events);
+      return events;
+    }
+
+    const valid = computeValidMoves(state, color, dice);
+    t.validMoves = valid;
+    if (!valid.length) {
+      events.push({ kind: 'NO_MOVES', seat: t.seat, color, value: dice });
+      if (dice === 6) {
+        t.awaiting = 'roll';
+        events.push({ kind: 'EXTRA', seat: t.seat, reason: 'six' });
+      } else {
+        nextTurn(state, events);
+      }
+    } else {
+      t.awaiting = 'move';
+    }
+    bump(state, events);
+    return events;
+  }
+
+  function move(state, pieceIdx) {
+    const t = state.turn;
+    if (state.phase !== 'playing' || t.awaiting !== 'move' || !t.validMoves.includes(pieceIdx)) return null;
+    const seat = state.seats[t.seat];
+    const color = seat.color;
+    const dice = t.dice;
+    const from = state.pieces[color][pieceIdx];
+    let to, path;
+    if (from < 0) { to = 0; path = [0]; }
+    else {
+      to = Math.min(from + dice, GOAL);
+      path = [];
+      for (let p = from + 1; p <= to; p++) path.push(p);
+    }
+    state.pieces[color][pieceIdx] = to;
+    t.deadline = null;
+    t.validMoves = [];
+    if (dice === 6) t.lastSixPiece = pieceIdx;
+
+    const events = [{ kind: 'MOVE', seat: t.seat, color, piece: pieceIdx, from, to, path, dice }];
+    let extra = false;
+
+    if (to === GOAL) {
+      events.push({ kind: 'PIECE_HOME', seat: t.seat, color, piece: pieceIdx });
+      if (state.rules.finishBonus) extra = true;
+    }
+
+    const a = absPos(color, to);
+    if (a !== null && !SAFE.has(a)) {
+      const victims = [];
+      for (const c of colorsInPlay(state)) {
+        if (!isOpponent(state, color, c)) continue;
+        state.pieces[c].forEach((r, j) => {
+          if (r >= 0 && r <= LAST_MAIN && absPos(c, r) === a) {
+            victims.push({ color: c, piece: j, from: r });
+            state.pieces[c][j] = -1;
+          }
+        });
+      }
+      if (victims.length) {
+        events.push({ kind: 'CAPTURE', seat: t.seat, color, victims });
+        if (state.rules.captureBonus) extra = true;
+      }
+    }
+
+    if (seat.finishedRank == null && state.pieces[color].every(r => r === GOAL)) {
+      state.ranking.push(seat.seat);
+      seat.finishedRank = state.ranking.length;
+      events.push({ kind: 'PLAYER_FINISHED', seat: seat.seat, rank: seat.finishedRank });
+      if (state.rules.endOnFirstWinner || unfinishedSeats(state).length <= 1) finishGame(state, events);
+      else nextTurn(state, events); // rolagem extra descartada
+      bump(state, events);
+      return events;
+    }
+
+    if (dice === 6 || extra) {
+      t.awaiting = 'roll';
+      events.push({ kind: 'EXTRA', seat: t.seat, reason: dice === 6 ? 'six' : 'bonus' });
+    } else {
+      nextTurn(state, events);
+    }
+    bump(state, events);
+    return events;
+  }
+
+  // Encerra a partida antes do fim natural (ex.: "Encerrar" no Modo Solo)
+  function endEarly(state) {
+    const events = [];
+    finishGame(state, events);
+    bump(state, events);
+    return events;
+  }
+
+  // ---------- Algoritmo dos bots ----------
+  function threatCount(state, pieces, color, abs) {
+    let n = 0;
+    for (const c of colorsInPlay(state)) {
+      if (!isOpponent(state, color, c)) continue;
+      for (const r of pieces[c]) {
+        if (r < 0 || r > LAST_MAIN) continue;
+        const d = (abs - absPos(c, r) + 52) % 52;
+        if (d >= 1 && d <= 6 && r + d <= LAST_MAIN) n++;
+      }
+    }
+    return n;
+  }
+
+  function analyzeMove(state, color, i, dice) {
+    const from = state.pieces[color][i];
+    const to = from < 0 ? 0 : Math.min(from + dice, GOAL);
+    const after = {};
+    for (const c in state.pieces) after[c] = state.pieces[c].slice();
+    after[color][i] = to;
+    const toAbs = absPos(color, to);
+    const victims = [];
+    if (toAbs !== null && !SAFE.has(toAbs)) {
+      for (const c in after) {
+        if (!isOpponent(state, color, c)) continue;
+        after[c].forEach((r, j) => {
+          if (r >= 0 && r <= LAST_MAIN && absPos(c, r) === toAbs) { victims.push({ color: c, piece: j, from: r }); after[c][j] = -1; }
+        });
+      }
+    }
+    const exposed = (rel) => rel >= 0 && rel <= LAST_MAIN && !SAFE.has(absPos(color, rel));
+    const threatAfter = exposed(to) ? threatCount(state, after, color, toAbs) : 0;
+    const threatBefore = exposed(from) ? threatCount(state, state.pieces, color, absPos(color, from)) : 0;
+    let othersThreatened = 0;
+    after[color].forEach((r, j) => {
+      if (j !== i && exposed(r) && threatCount(state, after, color, absPos(color, r)) > 0) othersThreatened++;
+    });
+    const formsBarrier = !!state.rules.blocks && toAbs !== null &&
+      after[color].filter(r => r >= 0 && r <= LAST_MAIN && absPos(color, r) === toAbs).length >= 2;
+    return {
+      piece: i, from, to, steps: from < 0 ? 1 : to - from, victims,
+      captureProgress: victims.reduce((s, v) => s + v.from, 0),
+      finishes: to === GOAL,
+      entersHome: to > LAST_MAIN && to < GOAL && from <= LAST_MAIN,
+      exitsBase: from < 0,
+      safeLanding: toAbs !== null && SAFE.has(toAbs),
+      fromSafe: from >= 0 && from <= LAST_MAIN && SAFE.has(absPos(color, from)),
+      threatAfter, threatBefore, othersThreatened, formsBarrier,
     };
+  }
 
-    const SAFE_POSITIONS = [
-      [6,1], [2,8], [8,13], [12,6],
-      [8,2], [1,6], [6,12], [13,8]
-    ];
+  function hardScore(a) {
+    const w = HARD_WEIGHTS;
+    let s = 0;
+    if (a.victims.length) s += w.capture + a.captureProgress;
+    if (a.finishes) s += w.finish;
+    if (a.entersHome) s += w.enterHome;
+    if (a.exitsBase) s += w.exitBase;
+    if (a.safeLanding) s += w.safe;
+    if (a.formsBarrier) s += w.barrier;
+    s += w.progress * a.steps;
+    s += w.threatened * a.threatAfter;
+    if (a.fromSafe && a.threatAfter > 0) s += w.leaveSafeToThreat;
+    s += w.othersThreatened * a.othersThreatened;
+    return s;
+  }
 
-    // SVG Padrão para Avatar
-    function getDefaultAvatar() {
-      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
-      const c = colors[Math.floor(Math.random() * colors.length)];
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${c}"/><circle cx="50" cy="38" r="20" fill="#ffffff"/><path d="M 20 85 C 20 65, 80 65, 80 85 Z" fill="#ffffff"/></svg>`;
-      return 'data:image/svg+xml;base64,' + btoa(svg);
+  const byAdvance = (a, b) => b.from - a.from;
+
+  // Prioridades do nível Médio e do autoplay (seção 5.5)
+  const MEDIUM_TIERS = [
+    [a => a.victims.length > 0, (a, b) => b.captureProgress - a.captureProgress || byAdvance(a, b)],
+    [a => a.finishes, byAdvance],
+    [a => a.exitsBase, byAdvance],
+    [a => a.threatBefore > 0 && a.threatAfter === 0, (a, b) => b.threatBefore - a.threatBefore || byAdvance(a, b)],
+    [a => a.safeLanding, byAdvance],
+    [() => true, byAdvance],
+  ];
+
+  function chooseMove(state, level = 'medium', rand = Math.random) {
+    const t = state.turn;
+    const moves = t.validMoves;
+    if (!moves.length) return null;
+    if (moves.length === 1) return moves[0];
+    const color = state.seats[t.seat].color;
+    const list = moves.map(i => analyzeMove(state, color, i, t.dice));
+
+    if (level === 'easy') {
+      const caps = list.filter(a => a.victims.length);
+      const rest = list.filter(a => !a.victims.length);
+      let pool = list;
+      if (caps.length) pool = (rest.length && rand() < 0.3) ? rest : caps;
+      return pool[Math.floor(rand() * pool.length)].piece;
     }
+    if (level === 'hard') {
+      list.forEach(a => { a.score = hardScore(a); });
+      list.sort((a, b) => b.score - a.score || byAdvance(a, b));
+      return list[0].piece;
+    }
+    for (const [match, cmp] of MEDIUM_TIERS) {
+      const tier = list.filter(match);
+      if (tier.length) return tier.sort(cmp)[0].piece;
+    }
+    return list[0].piece;
+  }
 
-    // Inicialização ao carregar a página
-    window.onload = () => {
-      loadStats();
-      setupBoardDOM();
+  return {
+    COLORS, OFFSET, SAFE, TRACK, HOME, GOAL, LAST_MAIN, DEFAULT_RULES, HARD_WEIGHTS,
+    absPos, pointOf, cryptoRng, seatColorsFor, defaultColorsFor, isOpponent,
+    createGame, chooseFirst, computeValidMoves, roll, move, endEarly,
+    analyzeMove, hardScore, chooseMove, progressOf,
+  };
+})();
+// ENGINE-END
+</script>
 
-      userAvatarBase64 = getDefaultAvatar();
-      document.getElementById('avatar-preview').src = userAvatarBase64;
-      document.getElementById('header-avatar').src = userAvatarBase64;
+<script>
+'use strict';
+/* =========================================================
+   Interface, controlador local (Solo / Hotseat)
+   ========================================================= */
+const E = LudoEngine;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const STEP_MS = REDUCED ? 40 : 120;
+const DICE_MS = REDUCED ? 200 : 600;
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlRoom = urlParams.get('room');
-      if (urlRoom) {
-        document.getElementById('input-room-code').value = urlRoom.toUpperCase();
-      }
+const CMETA = {
+  red: { name: 'Vermelho', sym: '●' },
+  green: { name: 'Verde', sym: '▲' },
+  yellow: { name: 'Amarelo', sym: '■' },
+  blue: { name: 'Azul', sym: '◆' },
+};
+const LEVELS = [['easy', 'Fácil'], ['medium', 'Médio'], ['hard', 'Difícil']];
+const LEVEL_NAME = Object.fromEntries(LEVELS);
+const SPEEDS = [['slow', 'Lenta'], ['normal', 'Normal'], ['fast', 'Rápida']];
+const SPEED_MS = { slow: 1500, normal: 800, fast: 300 };
+const AVATARS = ['😀', '😎', '🦊', '🐼', '🐯', '🦁', '🐸', '🐙', '👑', '🚀', '⚡', '🍕', '🎩', '🐧', '🦄', '🔥'];
+const LOCAL_AVATARS = ['😀', '😎', '🦊', '🐼'];
+const BOT_AVATAR = '🤖';
+const PIP_LAYOUT = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-      // Page Visibility API para reconexão/manutenção do foco do turno
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && currentGameState) {
-          renderGameState(currentGameState);
+const RULE_DEFS = [
+  { key: 'exitOnOne', label: 'Sair da base com 1 ou 6', def: false },
+  { key: 'blocks', label: 'Bloqueio (barreira de 2 peões)', def: false },
+  { key: 'captureBonus', label: 'Rolagem extra ao capturar', def: true },
+  { key: 'finishBonus', label: 'Rolagem extra ao chegar ao centro', def: true },
+  { key: 'threeSixesLimit', label: 'Limite de três 6 seguidos', def: true },
+  { key: 'threeSixesPenalty', label: 'Penalidade dos três 6 (peão volta à base)', def: false },
+  { key: 'exactFinish', label: 'Número exato para o centro', def: true },
+  { key: 'endOnFirstWinner', label: 'Encerrar no 1º vencedor', def: false },
+  { key: 'autoSingleMove', label: 'Movimento automático quando há só um', def: true },
+  { key: 'quickMode', label: 'Modo rápido (1 peão já na saída)', def: false },
+];
+const defaultRuleToggles = () => Object.fromEntries(RULE_DEFS.map(r => [r.key, r.def]));
+const toEngineRules = (t) => ({
+  exitOn: t.exitOnOne ? [1, 6] : [6],
+  blocks: !!t.blocks, captureBonus: !!t.captureBonus, finishBonus: !!t.finishBonus,
+  threeSixesLimit: !!t.threeSixesLimit, threeSixesPenalty: !!t.threeSixesPenalty,
+  exactFinish: !!t.exactFinish, endOnFirstWinner: !!t.endOnFirstWinner,
+  autoSingleMove: !!t.autoSingleMove, quickMode: !!t.quickMode, teams: false,
+});
+
+// ---------- Utilidades ----------
+const $ = (s, el = document) => el.querySelector(s);
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k === 'style') el.setAttribute('style', v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+const Store = {
+  get(k, def) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* armazenamento indisponível */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* idem */ } },
+};
+const cleanName = (n) => (n || '').trim().slice(0, 12);
+
+function fillAvatar(el, avatar) {
+  el.textContent = '';
+  if (typeof avatar === 'string' && avatar.startsWith('data:image/')) {
+    const img = new Image();
+    img.alt = '';
+    img.src = avatar;
+    el.append(img);
+  } else {
+    el.textContent = avatar || '🙂';
+  }
+  return el;
+}
+const avatarEl = (avatar, color, extra = '') => {
+  const el = h('span', { class: 'avatar ' + extra });
+  if (color) el.style.setProperty('--c', `var(--${color})`);
+  return fillAvatar(el, avatar);
+};
+
+let toastTimer = null;
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = h('div', { class: 'toast', role: 'status', text: msg });
+  document.body.append(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), 2600);
+}
+
+function openModal(content, { dismissable = true, onClose } = {}) {
+  const back = h('div', { class: 'modal-back' });
+  const box = h('div', { class: 'modal-box', role: 'dialog', 'aria-modal': 'true' }, content);
+  back.append(box);
+  const close = () => { back.remove(); onClose && onClose(); };
+  if (dismissable) back.addEventListener('click', e => { if (e.target === back) close(); });
+  $('#modal-root').append(back);
+  const focusable = box.querySelector('button, input');
+  if (focusable) focusable.focus();
+  return close;
+}
+
+// ---------- Som (WebAudio, sem arquivos) ----------
+const Sound = {
+  muted: Store.get('ludo:mute', false),
+  ctx: null,
+  tone(freq, dur, type = 'sine', vol = 0.15, when = 0) {
+    const c = this.ctx;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    const t = c.currentTime + when;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  },
+  play(kind) {
+    if (this.muted) return;
+    try {
+      this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch { return; }
+    switch (kind) {
+      case 'dice': for (let i = 0; i < 6; i++) this.tone(260 + Math.random() * 480, 0.05, 'square', 0.04, i * 0.08); break;
+      case 'move': this.tone(640, 0.06, 'triangle', 0.1); break;
+      case 'capture': this.tone(520, 0.12, 'sawtooth', 0.1); this.tone(240, 0.28, 'sawtooth', 0.1, 0.1); break;
+      case 'home': [523, 659, 784].forEach((f, i) => this.tone(f, 0.16, 'triangle', 0.14, i * 0.09)); break;
+      case 'win': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.32, 'triangle', 0.16, i * 0.13)); break;
+      case 'turn': this.tone(880, 0.09, 'sine', 0.07); break;
+      case 'nomove': this.tone(200, 0.22, 'sine', 0.1); break;
+    }
+  },
+  toggle() { this.muted = !this.muted; Store.set('ludo:mute', this.muted); updateMuteButtons(); },
+};
+function updateMuteButtons() {
+  document.querySelectorAll('[data-mute]').forEach(b => {
+    b.innerHTML = `<i class="fa-solid ${Sound.muted ? 'fa-volume-xmark' : 'fa-volume-high'}"></i>`;
+    b.setAttribute('aria-label', Sound.muted ? 'Ativar som' : 'Silenciar');
+  });
+}
+
+function celebrate(big) {
+  if (typeof window.confetti !== 'function') return;
+  const count = REDUCED ? 30 : (big ? 200 : 50);
+  window.confetti({ particleCount: count, spread: big ? 100 : 60, origin: { y: 0.6 }, disableForReducedMotion: false });
+  if (big && !REDUCED) {
+    setTimeout(() => window.confetti({ particleCount: 80, angle: 60, spread: 70, origin: { x: 0 } }), 250);
+    setTimeout(() => window.confetti({ particleCount: 80, angle: 120, spread: 70, origin: { x: 1 } }), 400);
+  }
+}
+
+// ---------- Dado ----------
+function makeDie(small = false) {
+  const el = h('div', { class: 'die' + (small ? ' small' : '') });
+  const pips = Array.from({ length: 9 }, () => h('span', { class: 'pip' }));
+  el.append(...pips);
+  const set = (v) => { pips.forEach((p, i) => { p.style.visibility = v && PIP_LAYOUT[v].includes(i) ? 'visible' : 'hidden'; }); el.dataset.value = v || ''; };
+  const roll = async (v) => {
+    el.classList.add('rolling');
+    const end = Date.now() + DICE_MS;
+    while (Date.now() < end) { set(1 + Math.floor(Math.random() * 6)); await wait(70); }
+    el.classList.remove('rolling');
+    set(v);
+  };
+  return { el, set, roll };
+}
+
+// ---------- Perfil ----------
+let profile = Store.get('ludo:profile', { name: '', avatar: '😀' });
+const saveProfile = () => Store.set('ludo:profile', profile);
+
+async function processPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const size = Math.min(img.naturalWidth, img.naturalHeight);
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 90;
+    cv.getContext('2d').drawImage(img, (img.naturalWidth - size) / 2, (img.naturalHeight - size) / 2, size, size, 0, 0, 90, 90);
+    return cv.toDataURL('image/jpeg', 0.7);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function openAvatarPicker() {
+  const fileInput = h('input', { type: 'file', accept: 'image/*', class: 'sr-only' });
+  let close;
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    try {
+      profile.avatar = await processPhoto(f);
+      saveProfile();
+      close();
+      renderHome();
+    } catch { toast('Não foi possível ler a imagem.'); }
+  });
+  const grid = h('div', { class: 'grid grid-cols-4 gap-2 my-4' },
+    AVATARS.map(a => h('button', {
+      class: 'btn btn-ghost text-2xl', 'aria-label': `Avatar ${a}`,
+      onclick: () => { profile.avatar = a; saveProfile(); close(); renderHome(); },
+    }, a)));
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-lg font-bold', text: 'Escolha seu avatar' }),
+    grid,
+    h('label', { class: 'btn btn-ghost w-full cursor-pointer' }, h('i', { class: 'fa-solid fa-camera' }), 'Usar uma foto', fileInput),
+    h('p', { class: 'text-xs text-slate-400 mt-2', text: 'A foto é recortada e reduzida para 90×90 neste aparelho.' }),
+  ));
+}
+
+// ---------- Navegação ----------
+function showScreen(name) {
+  for (const id of ['home', 'setup', 'game']) $('#screen-' + id).hidden = id !== name;
+  if (name === 'home') renderHome();
+  window.scrollTo(0, 0);
+}
+
+function latestSave() {
+  const a = Store.get('ludo:solo', null);
+  const b = Store.get('ludo:local', null);
+  const list = [a, b].filter(x => x && x.state && x.state.phase !== 'finished');
+  list.sort((x, y) => (y.savedAt || 0) - (x.savedAt || 0));
+  return list[0] || null;
+}
+
+function renderHome() {
+  const root = $('#screen-home');
+  root.innerHTML = '';
+  const saved = latestSave();
+  const nameInput = h('input', { type: 'text', maxlength: '12', placeholder: 'Seu apelido', 'aria-label': 'Apelido', class: 'flex-1 min-w-0' });
+  nameInput.value = profile.name || '';
+  nameInput.addEventListener('input', () => { profile.name = nameInput.value.slice(0, 12); saveProfile(); });
+  nameInput.addEventListener('blur', () => { profile.name = cleanName(nameInput.value); nameInput.value = profile.name; saveProfile(); });
+
+  const logo = h('div', { class: 'grid grid-cols-2 gap-1 w-14 h-14 rotate-45 rounded-xl overflow-hidden shadow-lg' },
+    ['red', 'green', 'blue', 'yellow'].map(c => h('div', { style: `background:var(--${c})` })));
+
+  root.append(h('div', { class: 'max-w-md mx-auto px-4 py-8 flex flex-col gap-5 min-h-screen' },
+    h('div', { class: 'flex items-center justify-between' },
+      h('div', { class: 'flex items-center gap-4' }, logo,
+        h('div', {}, h('h1', { class: 'text-3xl font-black tracking-tight', text: 'Ludo Supreme' }),
+          h('p', { class: 'text-slate-400 text-sm', text: 'O Ludo clássico, no navegador' }))),
+      h('button', { class: 'icon-btn', 'data-mute': '', onclick: () => Sound.toggle() })),
+    h('div', { class: 'card flex items-center gap-3' },
+      h('button', { class: 'shrink-0', 'aria-label': 'Trocar avatar', onclick: openAvatarPicker },
+        avatarEl(profile.avatar, null, '!w-14 !h-14 !text-3xl')),
+      nameInput),
+    saved ? h('button', { class: 'btn btn-primary w-full text-lg', onclick: () => resumeGame(saved) },
+      h('i', { class: 'fa-solid fa-play' }), 'Continuar partida',
+      h('span', { class: 'text-xs font-normal opacity-90', text: `(${saved.state.mode === 'solo' ? 'Solo' : 'Local'} · ${saved.state.seats.length} jogadores)` })) : null,
+    h('button', { class: 'btn ' + (saved ? 'btn-ghost' : 'btn-primary') + ' w-full text-lg py-4', onclick: () => { renderSoloSetup(); showScreen('setup'); } },
+      h('i', { class: 'fa-solid fa-robot' }), 'Jogar Sozinho'),
+    h('button', { class: 'btn btn-ghost w-full', onclick: () => { renderLocalSetup(); showScreen('setup'); } },
+      h('i', { class: 'fa-solid fa-users' }), 'Jogar no mesmo aparelho'),
+    h('div', { class: 'grid grid-cols-2 gap-3' },
+      h('button', { class: 'btn btn-ghost', disabled: true, title: 'Em breve' }, h('i', { class: 'fa-solid fa-plus' }), 'Criar Sala'),
+      h('button', { class: 'btn btn-ghost', disabled: true, title: 'Em breve' }, h('i', { class: 'fa-solid fa-right-to-bracket' }), 'Entrar em Sala')),
+    h('p', { class: 'text-center text-xs text-slate-500', text: 'Salas online chegam na próxima versão.' }),
+  ));
+  updateMuteButtons();
+}
+
+// ---------- Componentes de configuração ----------
+function seg(options, value, onChange, label) {
+  return h('div', { class: 'seg', role: 'group', 'aria-label': label || null },
+    options.map(([v, text]) => h('button', { type: 'button', 'aria-pressed': String(v === value), onclick: () => onChange(v) }, text)));
+}
+function checkbox(label, checked, onChange) {
+  const input = h('input', { type: 'checkbox' });
+  input.checked = !!checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  return h('label', { class: 'flex items-center gap-3 py-2 cursor-pointer select-none min-h-[44px]' }, input, h('span', { text: label }));
+}
+const section = (title, ...body) => h('div', { class: 'card flex flex-col gap-3' },
+  h('div', { class: 'text-xs uppercase tracking-wider text-slate-400', text: title }), ...body);
+
+const ui = { rulesOpen: false };
+function rulesPanel(toggles, onChange) {
+  const det = h('details', { class: 'card' },
+    h('summary', { class: 'cursor-pointer font-semibold min-h-[32px] flex items-center' }, 'Regras da casa',
+      h('span', { class: 'ml-2 text-xs text-slate-400 font-normal', text: '(padrão: Ludo clássico)' })),
+    h('div', { class: 'mt-2' },
+      RULE_DEFS.map(d => checkbox(d.label, toggles[d.key], v => { toggles[d.key] = v; onChange(); })),
+      h('button', { class: 'btn btn-ghost mt-2 text-sm', onclick: () => { Object.assign(toggles, defaultRuleToggles()); onChange(); } }, 'Restaurar regras clássicas')));
+  det.open = ui.rulesOpen;
+  det.addEventListener('toggle', () => { ui.rulesOpen = det.open; });
+  return det;
+}
+function timerControls(cfg, onChange) {
+  const label = h('span', { class: 'text-sm text-slate-300 w-12 text-right', text: `${cfg.seconds}s` });
+  const range = h('input', { type: 'range', min: '10', max: '40', step: '5', class: 'flex-1 accent-amber-500', 'aria-label': 'Segundos por ação' });
+  range.value = cfg.seconds;
+  range.addEventListener('input', () => { label.textContent = `${range.value}s`; });
+  range.addEventListener('change', () => { cfg.seconds = Number(range.value); onChange(); });
+  return [
+    checkbox('Limitar o tempo de cada ação humana', cfg.timer, v => { cfg.timer = v; onChange(); }),
+    cfg.timer ? h('div', { class: 'flex items-center gap-3' }, range, label) : null,
+  ];
+}
+function setupHeader(title) {
+  return h('div', { class: 'flex items-center gap-3' },
+    h('button', { class: 'icon-btn', 'aria-label': 'Voltar', onclick: () => showScreen('home') }, h('i', { class: 'fa-solid fa-arrow-left' })),
+    h('h1', { class: 'text-2xl font-black', text: title }));
+}
+
+function nameBots(players) {
+  const total = {};
+  const seen = {};
+  players.filter(p => p.isBot).forEach(p => { total[p.botLevel] = (total[p.botLevel] || 0) + 1; });
+  for (const p of players) {
+    if (!p.isBot) continue;
+    seen[p.botLevel] = (seen[p.botLevel] || 0) + 1;
+    p.name = `Robô ${LEVEL_NAME[p.botLevel]}` + (seen[p.botLevel] > 1 ? ` ${seen[p.botLevel]}` : '');
+    p.avatar = BOT_AVATAR;
+  }
+  return players;
+}
+
+// ---------- Configuração do Modo Solo ----------
+const soloCfg = Object.assign({
+  opponents: 3, color: 'red', level: 'medium', perBot: false, levels: ['medium', 'medium', 'medium'],
+  speed: 'normal', timer: false, seconds: 20, rules: defaultRuleToggles(),
+}, Store.get('ludo:soloConfig', {}));
+soloCfg.rules = Object.assign(defaultRuleToggles(), soloCfg.rules);
+
+function renderSoloSetup() {
+  const cfg = soloCfg;
+  const rerender = () => { Store.set('ludo:soloConfig', cfg); renderSoloSetup(); };
+  const colors = E.seatColorsFor(cfg.color, cfg.opponents);
+  const botColors = colors.filter(c => c !== cfg.color);
+
+  const table = h('div', { class: 'grid grid-cols-2 gap-2' }, E.COLORS.map(c => {
+    const style = `--c:var(--${c})`;
+    if (c === cfg.color) {
+      return h('div', { class: 'player-row current', style },
+        avatarEl(profile.avatar, c), h('div', { class: 'min-w-0' },
+          h('div', { class: 'font-semibold truncate', text: cleanName(profile.name) || 'Você' }),
+          h('div', { class: 'text-xs text-slate-400', text: `${CMETA[c].sym} ${CMETA[c].name}` })));
+    }
+    const k = botColors.indexOf(c);
+    if (k < 0) {
+      return h('div', { class: 'player-row opacity-40 border-dashed !border-slate-600' },
+        h('span', { class: 'avatar', style }, ''), h('div', { class: 'text-sm', text: `${CMETA[c].sym} vazio` }));
+    }
+    const lvl = cfg.perBot ? cfg.levels[k] : cfg.level;
+    const sel = h('select', { class: 'bg-slate-900 rounded-md text-sm px-1 py-1 mt-1', 'aria-label': `Dificuldade do robô ${CMETA[c].name}` },
+      LEVELS.map(([v, t]) => { const o = h('option', { value: v, text: t }); o.selected = v === lvl; return o; }));
+    sel.addEventListener('change', () => { cfg.levels[k] = sel.value; rerender(); });
+    return h('div', { class: 'player-row', style },
+      avatarEl(BOT_AVATAR, c), h('div', { class: 'min-w-0' },
+        h('div', { class: 'font-semibold truncate', text: `Robô ${LEVEL_NAME[lvl]}` }),
+        cfg.perBot ? sel : h('div', { class: 'text-xs text-slate-400', text: `${CMETA[c].sym} ${CMETA[c].name}` })));
+  }));
+
+  const root = $('#screen-setup');
+  root.innerHTML = '';
+  root.append(h('div', { class: 'max-w-xl mx-auto px-4 py-6 flex flex-col gap-4' },
+    setupHeader('Jogar Sozinho'),
+    section('Número de adversários', seg([[1, '1 robô'], [2, '2 robôs'], [3, '3 robôs']], cfg.opponents, v => { cfg.opponents = v; rerender(); }, 'Adversários')),
+    section('Sua cor', h('div', { class: 'flex gap-3' }, E.COLORS.map(c =>
+      h('button', { class: 'color-chip', style: `background:var(--${c})`, 'aria-pressed': String(c === cfg.color), 'aria-label': CMETA[c].name, onclick: () => { cfg.color = c; rerender(); } }, CMETA[c].sym)))),
+    section('Dificuldade',
+      seg(LEVELS, cfg.level, v => { cfg.level = v; cfg.levels = cfg.levels.map(() => v); rerender(); }, 'Dificuldade'),
+      checkbox('Uma dificuldade por adversário', cfg.perBot, v => { cfg.perBot = v; rerender(); })),
+    section('Mesa', table),
+    section('Velocidade dos robôs', seg(SPEEDS, cfg.speed, v => { cfg.speed = v; rerender(); }, 'Velocidade')),
+    section('Tempo', ...timerControls(cfg, rerender)),
+    rulesPanel(cfg.rules, rerender),
+    h('button', { class: 'btn btn-primary w-full text-lg py-4', onclick: startSolo }, h('i', { class: 'fa-solid fa-dice' }), 'Iniciar partida'),
+  ));
+}
+
+function startSolo() {
+  const cfg = soloCfg;
+  const colors = E.seatColorsFor(cfg.color, cfg.opponents);
+  let k = 0;
+  const players = colors.map(c => c === cfg.color
+    ? { color: c, name: cleanName(profile.name) || 'Jogador 1', avatar: profile.avatar, isBot: false }
+    : { color: c, isBot: true, botLevel: cfg.perBot ? cfg.levels[k++] : cfg.level });
+  nameBots(players);
+  startNewGame({
+    mode: 'solo', players, rules: toEngineRules(cfg.rules),
+    speed: cfg.speed, timer: { enabled: cfg.timer, seconds: cfg.seconds },
+  });
+}
+
+// ---------- Configuração do modo local (hotseat) ----------
+const localCfg = Object.assign({
+  seats: {
+    red: { type: 'human', name: '', level: 'medium' },
+    green: { type: 'bot', name: '', level: 'medium' },
+    yellow: { type: 'human', name: '', level: 'medium' },
+    blue: { type: 'bot', name: '', level: 'medium' },
+  },
+  speed: 'normal', timer: false, seconds: 20, rules: defaultRuleToggles(),
+}, Store.get('ludo:localConfig', {}));
+localCfg.rules = Object.assign(defaultRuleToggles(), localCfg.rules);
+
+function renderLocalSetup() {
+  const cfg = localCfg;
+  const persist = () => Store.set('ludo:localConfig', cfg);
+  const rerender = () => { persist(); renderLocalSetup(); };
+  const rows = E.COLORS.map(c => {
+    const s = cfg.seats[c];
+    const extra = [];
+    if (s.type === 'human') {
+      const input = h('input', { type: 'text', maxlength: '12', placeholder: 'Nome', class: 'w-full', 'aria-label': `Nome do jogador ${CMETA[c].name}` });
+      input.value = s.name;
+      input.addEventListener('input', () => { s.name = input.value.slice(0, 12); persist(); });
+      extra.push(input);
+    } else if (s.type === 'bot') {
+      extra.push(seg(LEVELS, s.level, v => { s.level = v; rerender(); }, 'Dificuldade'));
+    }
+    return h('div', { class: 'card flex flex-col gap-2', style: `border-left:6px solid var(--${c})` },
+      h('div', { class: 'flex items-center gap-3 flex-wrap' },
+        h('span', { class: 'font-bold w-24', text: `${CMETA[c].sym} ${CMETA[c].name}` }),
+        seg([['human', 'Humano'], ['bot', 'Robô'], ['empty', 'Vazio']], s.type, v => { s.type = v; rerender(); }, 'Tipo de assento')),
+      ...extra);
+  });
+  const root = $('#screen-setup');
+  root.innerHTML = '';
+  root.append(h('div', { class: 'max-w-xl mx-auto px-4 py-6 flex flex-col gap-4' },
+    setupHeader('Mesmo aparelho'),
+    h('p', { class: 'text-sm text-slate-400', text: 'Jogadores revezam no mesmo aparelho. Assentos podem ser preenchidos com robôs.' }),
+    ...rows,
+    section('Velocidade dos robôs', seg(SPEEDS, cfg.speed, v => { cfg.speed = v; rerender(); }, 'Velocidade')),
+    section('Tempo', ...timerControls(cfg, rerender)),
+    rulesPanel(cfg.rules, rerender),
+    h('button', { class: 'btn btn-primary w-full text-lg py-4', onclick: startLocal }, h('i', { class: 'fa-solid fa-dice' }), 'Iniciar partida'),
+  ));
+}
+
+function startLocal() {
+  const cfg = localCfg;
+  let humanIdx = 0;
+  const players = [];
+  for (const c of E.COLORS) {
+    const s = cfg.seats[c];
+    if (s.type === 'human') {
+      humanIdx++;
+      players.push({ color: c, name: cleanName(s.name) || `Jogador ${humanIdx}`, avatar: LOCAL_AVATARS[humanIdx - 1], isBot: false });
+    } else if (s.type === 'bot') {
+      players.push({ color: c, isBot: true, botLevel: s.level });
+    }
+  }
+  if (players.length < 2) { toast('Escolha pelo menos 2 assentos.'); return; }
+  nameBots(players);
+  startNewGame({
+    mode: 'local', players, rules: toEngineRules(cfg.rules),
+    speed: cfg.speed, timer: { enabled: cfg.timer, seconds: cfg.seconds },
+  });
+}
+
+/* =========================================================
+   Controlador da partida
+   ========================================================= */
+const Game = {
+  state: null, config: null, busy: false, paused: false, pausedLeft: null,
+  botTimer: null, turnTimer: null, turnMs: 20000, override: {}, fastBots: false,
+  tokenEls: {}, cellEls: {}, goalEls: {}, die: null, statusOverride: null, announcedTurn: null,
+};
+
+const currentSeat = () => Game.state.seats[Game.state.turn.seat];
+const isAuto = (seat) => seat.isBot || seat.afk;
+const humanSeats = () => Game.state.seats.filter(s => !s.isBot);
+const seatLabel = (seat) => `${CMETA[seat.color].sym} ${seat.name}`;
+const botDelay = () => (Game.fastBots ? 150 : SPEED_MS[Game.config.speed] || 800);
+
+function startNewGame(config) {
+  const state = E.createGame({ mode: config.mode, players: config.players, rules: config.rules });
+  state.config = config;
+  state.humansDoneHandled = false;
+  loadGame(state);
+  runFirstDraw();
+}
+
+function resumeGame(saved) {
+  const state = saved.state;
+  state.turn.deadline = null;
+  loadGame(state);
+  if (state.phase === 'choosingFirst') runFirstDraw();
+  else proceed();
+}
+
+function loadGame(state) {
+  clearTimers();
+  Game.state = state;
+  Game.config = state.config;
+  Game.busy = false;
+  Game.paused = false;
+  Game.pausedLeft = null;
+  Game.override = {};
+  Game.fastBots = !!state.humansDoneHandled;
+  Game.statusOverride = null;
+  Game.announcedTurn = null;
+  $('#game-title').textContent = state.mode === 'solo' ? 'Modo Solo' : 'Mesmo aparelho';
+  showScreen('game');
+  buildBoard();
+  buildTokens();
+  if (!Game.die) {
+    Game.die = makeDie();
+    $('#die-btn').append(Game.die.el);
+  }
+  Game.die.set(state.turn.dice || 6);
+  render();
+}
+
+function clearTimers() {
+  clearTimeout(Game.botTimer);
+  clearTimeout(Game.turnTimer);
+  Game.botTimer = Game.turnTimer = null;
+}
+
+function save() {
+  const s = Game.state;
+  if (!s) return;
+  const key = s.mode === 'solo' ? 'ludo:solo' : 'ludo:local';
+  if (s.phase === 'finished') Store.del(key);
+  else Store.set(key, { state: s, savedAt: Date.now() });
+}
+
+async function runFirstDraw() {
+  Game.busy = true;
+  const res = E.chooseFirst(Game.state, E.cryptoRng);
+  await showDrawOverlay(res);
+  Game.busy = false;
+  pushLog(`${seatLabel(Game.state.seats[res.winner])} começa`);
+  save();
+  proceed();
+}
+
+async function showDrawOverlay(res) {
+  const s = Game.state;
+  const rows = s.seats.map(seat => {
+    const die = makeDie(true);
+    const row = h('div', { class: 'player-row', style: `--c:var(--${seat.color})` },
+      avatarEl(seat.avatar, seat.color), h('div', { class: 'flex-1 font-semibold truncate', text: seatLabel(seat) }), die.el);
+    return { row, die };
+  });
+  const msg = h('div', { class: 'text-center font-bold text-lg min-h-[28px] mt-3' });
+  const close = openModal(h('div', {},
+    h('h2', { class: 'text-xl font-black mb-3 text-center', text: 'Quem começa?' }),
+    h('div', { class: 'flex flex-col gap-1' }, rows.map(r => r.row)), msg), { dismissable: false });
+  await wait(400);
+  for (let ri = 0; ri < res.rounds.length; ri++) {
+    const round = res.rounds[ri];
+    if (ri > 0) { msg.textContent = 'Empate! Desempatando…'; await wait(900); }
+    rows.forEach((r, seat) => { r.row.style.opacity = round.some(x => x.seat === seat) ? '1' : '.35'; });
+    Sound.play('dice');
+    await Promise.all(round.map(x => rows[x.seat].die.roll(x.value)));
+    await wait(650);
+  }
+  rows[res.winner].row.classList.add('current');
+  msg.textContent = `${s.seats[res.winner].name} começa!`;
+  Sound.play('turn');
+  await wait(REDUCED ? 700 : 1400);
+  close();
+}
+
+// Decide o próximo passo automático depois de cada mudança de estado.
+function proceed() {
+  clearTimers();
+  const s = Game.state;
+  if (!s) return;
+  render();
+  if (s.phase !== 'playing' || Game.paused || Game.busy) return;
+  const seat = currentSeat();
+  if (isAuto(seat)) {
+    const delay = seat.isBot ? botDelay() : 2000;
+    Game.botTimer = setTimeout(botAct, s.turn.awaiting === 'roll' ? delay : Math.max(150, delay * 0.6));
+    return;
+  }
+  if (s.turn.awaiting === 'move' && s.turn.validMoves.length === 1 && s.rules.autoSingleMove) {
+    Game.botTimer = setTimeout(() => actMove(s.turn.validMoves[0], true), 450);
+    return;
+  }
+  if (s.turn.awaiting === 'roll' && Game.announcedTurn !== s.turnNumber) {
+    Game.announcedTurn = s.turnNumber;
+    Sound.play('turn');
+    if (s.mode === 'local' && humanSeats().length >= 2) announce(seat);
+  }
+  startTurnTimer();
+}
+
+function announce(seat) {
+  const b = $('#turn-banner');
+  b.textContent = `Vez de ${seat.name} ${CMETA[seat.color].sym}`;
+  b.style.setProperty('--c', `var(--${seat.color})`);
+  b.classList.add('on');
+  clearTimeout(announce.t);
+  announce.t = setTimeout(() => b.classList.remove('on'), 1300);
+}
+
+function startTurnTimer() {
+  const s = Game.state;
+  const t = Game.config.timer;
+  if (!t || !t.enabled) return;
+  Game.turnMs = (s.rules.quickMode ? 10 : t.seconds) * 1000;
+  if (!s.turn.deadline) s.turn.deadline = Date.now() + Game.turnMs;
+  Game.turnTimer = setTimeout(onTimeout, Math.max(0, s.turn.deadline - Date.now()));
+}
+
+function onTimeout() {
+  const s = Game.state;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing') return;
+  const seat = currentSeat();
+  if (seat.isBot) return;
+  seat.timeouts++;
+  if (seat.timeouts >= 3 && !seat.afk) {
+    seat.afk = true;
+    toast(`${seat.name} está ausente — o robô assumiu. Toque na tela para voltar.`);
+  }
+  if (s.turn.awaiting === 'roll') actRoll(true);
+  else actMove(E.chooseMove(s, 'medium'), true);
+}
+
+async function botAct() {
+  const s = Game.state;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing') return;
+  const seat = currentSeat();
+  if (!isAuto(seat)) return;
+  if (s.turn.awaiting === 'roll') await actRoll(true);
+  else await actMove(E.chooseMove(s, seat.isBot ? seat.botLevel : 'medium'), true);
+}
+
+async function actRoll(auto = false) {
+  const s = Game.state;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'roll') return;
+  const seat = currentSeat();
+  if (!auto) {
+    if (isAuto(seat)) return;
+    seat.timeouts = 0;
+  }
+  clearTimers();
+  Game.busy = true;
+  render();
+  const events = E.roll(s, E.cryptoRng);
+  await playEvents(events);
+  Game.busy = false;
+  afterAction();
+}
+
+async function actMove(piece, auto = false) {
+  const s = Game.state;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'move') return;
+  if (!s.turn.validMoves.includes(piece)) return;
+  const seat = currentSeat();
+  if (!auto) {
+    if (isAuto(seat)) return;
+    seat.timeouts = 0;
+  }
+  clearTimers();
+  Game.busy = true;
+  hidePreview();
+  const events = E.move(s, piece);
+  await playEvents(events);
+  Game.busy = false;
+  afterAction();
+}
+
+function afterAction() {
+  const s = Game.state;
+  Game.statusOverride = null;
+  save();
+  if (s.phase === 'finished') { render(); showResults(); return; }
+  const humans = humanSeats();
+  if (!s.humansDoneHandled && humans.length && humans.every(x => x.finishedRank != null)) {
+    s.humansDoneHandled = true;
+    save();
+    render();
+    showHumansDone();
+    return;
+  }
+  proceed();
+}
+
+// Anima a lista de eventos do motor. O estado já está aplicado; `override`
+// mantém peões na posição antiga até a animação chegar neles.
+async function playEvents(events) {
+  const s = Game.state;
+  const ov = Game.override = {};
+  const setOv = (c, i, v) => { (ov[c] = ov[c] || {})[i] = v; };
+  const clearOv = (c, i) => { if (ov[c]) delete ov[c][i]; };
+  for (const e of events) {
+    if (e.kind === 'MOVE') setOv(e.color, e.piece, e.from);
+    if (e.kind === 'CAPTURE') e.victims.forEach(v => setOv(v.color, v.piece, v.from));
+    if (e.kind === 'THREE_SIXES' && e.penalty) setOv(e.penalty.color, e.penalty.piece, e.penalty.from);
+  }
+  layoutTokens();
+  const actor = events[0] && events[0].seat != null ? s.seats[events[0].seat] : null;
+  const quick = actor && actor.isBot && Game.fastBots;
+  let moveSummary = null;
+
+  for (const e of events) {
+    const seat = e.seat != null ? s.seats[e.seat] : null;
+    switch (e.kind) {
+      case 'ROLL':
+        Sound.play('dice');
+        Game.statusOverride = `${seat.name} rolou…`;
+        renderStatus();
+        await Game.die.roll(e.value);
+        Game.statusOverride = `${seat.name} tirou ${e.value}`;
+        renderStatus();
+        renderSixes();
+        break;
+      case 'NO_MOVES':
+        Sound.play('nomove');
+        Game.statusOverride = `${seat.name} tirou ${e.value} — nenhum movimento possível`;
+        renderStatus();
+        pushLog(`${seatLabel(seat)}: ${e.value} → sem jogadas`);
+        await wait(quick ? 400 : 1500);
+        break;
+      case 'THREE_SIXES':
+        Sound.play('nomove');
+        Game.statusOverride = `${seat.name} tirou três 6 seguidos — perdeu a vez`;
+        renderStatus();
+        pushLog(`${seatLabel(seat)}: três 6 seguidos, perdeu a vez`);
+        await wait(quick ? 500 : 1300);
+        if (e.penalty) { clearOv(e.penalty.color, e.penalty.piece); layoutTokens(new Set([`${e.penalty.color}-${e.penalty.piece}`])); await wait(500); }
+        break;
+      case 'MOVE': {
+        const key = `${e.color}-${e.piece}`;
+        for (const p of e.path) {
+          setOv(e.color, e.piece, p);
+          layoutTokens();
+          Sound.play('move');
+          await wait(quick ? 50 : STEP_MS);
         }
+        clearOv(e.color, e.piece);
+        Game.tokenEls[key].style.setProperty('--t', '110ms');
+        moveSummary = e.from < 0 ? 'tirou um peão da base' : `andou ${e.to - e.from} casa${e.to - e.from > 1 ? 's' : ''}`;
+        break;
+      }
+      case 'CAPTURE': {
+        Sound.play('capture');
+        const names = [...new Set(e.victims.map(v => s.seats.find(x => x.color === v.color).name))].join(', ');
+        e.victims.forEach(v => clearOv(v.color, v.piece));
+        layoutTokens(new Set(e.victims.map(v => `${v.color}-${v.piece}`)));
+        moveSummary = `capturou ${names}`;
+        await wait(quick ? 200 : 500);
+        break;
+      }
+      case 'PIECE_HOME':
+        Sound.play('home');
+        moveSummary = 'levou um peão ao centro';
+        if (!quick) celebrate(false);
+        await wait(quick ? 100 : 300);
+        break;
+      case 'PLAYER_FINISHED':
+        pushLog(`🏆 ${seatLabel(seat)} terminou em ${e.rank}º`);
+        if (e.rank === 1) { Sound.play('win'); celebrate(true); }
+        toast(`${seat.name} terminou em ${e.rank}º lugar!`);
+        await wait(quick ? 200 : 700);
+        break;
+    }
+  }
+  const mv = events.find(e => e.kind === 'MOVE');
+  if (mv) pushLog(`${seatLabel(s.seats[mv.seat])}: ${mv.dice} → ${moveSummary}`);
+  Game.override = {};
+}
+
+function pushLog(text) {
+  const s = Game.state;
+  s.log = (s.log || []).concat(text).slice(-5);
+  renderHistory();
+}
+
+/* ---------- Tabuleiro ---------- */
+function buildBoard() {
+  const board = $('#board');
+  board.innerHTML = '';
+  Game.cellEls = {};
+  const place = (el, r, c, rs = 1, cs = 1) => { el.style.gridRow = `${r + 1} / span ${rs}`; el.style.gridColumn = `${c + 1} / span ${cs}`; return el; };
+
+  // Bases
+  const BASES = { red: [0, 0], green: [0, 9], yellow: [9, 9], blue: [9, 0] };
+  for (const [color, [r0, c0]] of Object.entries(BASES)) {
+    const base = place(h('div', { class: 'base', style: `--c:var(--${color});--cl:var(--${color}-l)` }), r0, c0, 6, 6);
+    const inner = h('div', { class: 'base-inner' });
+    for (const [pct1, pct2] of [[20, 20], [20, 80], [80, 20], [80, 80]]) inner.append(h('div', { class: 'slot', style: `top:${pct1}%;left:${pct2}%` }));
+    inner.append(h('div', { class: 'base-label', 'data-base-label': color }));
+    base.append(inner);
+    for (const pos of ['top:1.5%;left:2.5%', 'top:1.5%;right:2.5%', 'bottom:1.5%;left:2.5%', 'bottom:1.5%;right:2.5%']) {
+      base.append(h('span', { class: 'base-sym', style: pos, text: CMETA[color].sym }));
+    }
+    board.append(base);
+  }
+
+  // Circuito principal
+  const startColor = { 0: 'red', 13: 'green', 26: 'yellow', 39: 'blue' };
+  E.TRACK.forEach(([r, c], abs) => {
+    const cell = place(h('div', { class: 'cell' }), r, c);
+    if (startColor[abs]) {
+      cell.classList.add('start');
+      cell.style.setProperty('--c', `var(--${startColor[abs]})`);
+      cell.textContent = CMETA[startColor[abs]].sym;
+    } else if (E.SAFE.has(abs)) {
+      cell.classList.add('star');
+      cell.textContent = '★';
+    }
+    board.append(cell);
+    Game.cellEls[`${r},${c}`] = cell;
+  });
+
+  // Retas finais
+  for (const color of E.COLORS) {
+    E.HOME[color].forEach(([r, c]) => {
+      const cell = place(h('div', { class: 'cell home', style: `--c:var(--${color})`, text: CMETA[color].sym }), r, c);
+      board.append(cell);
+      Game.cellEls[`${r},${c}`] = cell;
+    });
+  }
+
+  // Centro com 4 triângulos
+  const center = place(h('div', { class: 'center' }), 6, 6, 3, 3);
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 3 3');
+  const tri = {
+    red: ['0,0 0,3 1.5,1.5', [0.55, 1.5]],
+    green: ['0,0 3,0 1.5,1.5', [1.5, 0.55]],
+    yellow: ['3,0 3,3 1.5,1.5', [2.45, 1.5]],
+    blue: ['0,3 3,3 1.5,1.5', [1.5, 2.45]],
+  };
+  Game.goalEls = {};
+  for (const [color, [pts, [tx, ty]]] of Object.entries(tri)) {
+    const p = document.createElementNS(NS, 'polygon');
+    p.setAttribute('points', pts);
+    p.setAttribute('fill', `var(--${color})`);
+    p.setAttribute('stroke', '#fff');
+    p.setAttribute('stroke-width', '0.04');
+    svg.append(p);
+    Game.goalEls[color] = p;
+    const t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', tx);
+    t.setAttribute('y', ty + 0.12);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-size', '0.34');
+    t.setAttribute('fill', 'rgba(255,255,255,.7)');
+    t.textContent = CMETA[color].sym;
+    svg.append(t);
+  }
+  center.append(svg);
+  board.append(center);
+}
+
+function buildTokens() {
+  const layer = $('#tokens');
+  layer.innerHTML = '';
+  Game.tokenEls = {};
+  for (const seat of Game.state.seats) {
+    for (let i = 0; i < 4; i++) {
+      const el = h('div', { class: 'token', role: 'button', tabindex: '-1', 'aria-label': `Peão ${i + 1} de ${seat.name}` });
+      el.style.setProperty('--c', `var(--${seat.color})`);
+      const body = fillAvatar(h('div', { class: 'tk-body' }), seat.avatar);
+      el.append(body, h('div', { class: 'tk-sym', text: CMETA[seat.color].sym }), h('div', { class: 'tk-count' }));
+      attachTokenHandlers(el, seat.color, i);
+      layer.append(el);
+      Game.tokenEls[`${seat.color}-${i}`] = el;
+    }
+  }
+}
+
+function canPick(color, i) {
+  const s = Game.state;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing' || s.turn.awaiting !== 'move') return false;
+  const seat = currentSeat();
+  return !isAuto(seat) && seat.color === color && s.turn.validMoves.includes(i);
+}
+
+function attachTokenHandlers(el, color, i) {
+  let lpTimer = null;
+  let longPressed = false;
+  el.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse' && canPick(color, i)) showPreview(color, i); });
+  el.addEventListener('pointerleave', () => { clearTimeout(lpTimer); hidePreview(); });
+  el.addEventListener('pointercancel', () => { clearTimeout(lpTimer); longPressed = false; hidePreview(); });
+  el.addEventListener('pointerdown', e => {
+    if (!canPick(color, i)) return;
+    longPressed = false;
+    if (e.pointerType !== 'mouse') lpTimer = setTimeout(() => { longPressed = true; showPreview(color, i); }, 350);
+  });
+  el.addEventListener('pointerup', () => {
+    clearTimeout(lpTimer);
+    if (!canPick(color, i)) return;
+    if (longPressed) { longPressed = false; hidePreview(); return; }
+    actMove(i);
+  });
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+let previewEl = null;
+function showPreview(color, i) {
+  hidePreview();
+  const s = Game.state;
+  const from = s.pieces[color][i];
+  const to = from < 0 ? 0 : Math.min(from + s.turn.dice, E.GOAL);
+  if (to === E.GOAL) previewEl = Game.goalEls[color];
+  else {
+    const [r, c] = E.pointOf(color, to, i);
+    previewEl = Game.cellEls[`${Math.floor(r)},${Math.floor(c)}`];
+  }
+  if (previewEl) previewEl.classList.add('preview');
+}
+function hidePreview() {
+  if (previewEl) previewEl.classList.remove('preview');
+  previewEl = null;
+}
+
+// Posiciona todos os peões; agrupa os que dividem a mesma casa.
+function layoutTokens(returning = new Set()) {
+  const s = Game.state;
+  if (!s) return;
+  const ov = Game.override || {};
+  const groups = new Map();
+  for (const seat of s.seats) {
+    s.pieces[seat.color].forEach((rel, i) => {
+      const pos = ov[seat.color] && ov[seat.color][i] != null ? ov[seat.color][i] : rel;
+      const [r, c] = E.pointOf(seat.color, pos, i);
+      const key = pos < 0 ? `base-${seat.color}-${i}` : `${r},${c}`;
+      if (!groups.has(key)) groups.set(key, { r, c, items: [] });
+      groups.get(key).items.push({ color: seat.color, i });
+    });
+  }
+
+  const t = s.turn;
+  const pickable = s.phase === 'playing' && !Game.busy && !Game.paused && t.awaiting === 'move' && !isAuto(currentSeat());
+  const turnColor = s.phase === 'playing' ? currentSeat().color : null;
+  const OFFS = { 1: [[0, 0]], 2: [[-0.2, 0], [0.2, 0]], 3: [[-0.2, -0.15], [0.2, -0.15], [0, 0.2]], 4: [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]] };
+
+  for (const { r, c, items } of groups.values()) {
+    const byColor = new Map();
+    for (const it of items) {
+      if (!byColor.has(it.color)) byColor.set(it.color, []);
+      byColor.get(it.color).push(it);
+    }
+    const colorGroups = [...byColor.values()];
+    const n = colorGroups.length;
+    const scale = n === 1 ? 1 : 0.7;
+    colorGroups.forEach((members, k) => {
+      const [dx, dy] = OFFS[Math.min(n, 4)][k] || [0, 0];
+      // Peões jogáveis ficam por cima da pilha
+      members.sort((a, b) => Number(pickable && a.color === turnColor && t.validMoves.includes(a.i)) - Number(pickable && b.color === turnColor && t.validMoves.includes(b.i)));
+      members.forEach((m, j) => {
+        const el = Game.tokenEls[`${m.color}-${m.i}`];
+        const top = j === members.length - 1;
+        const lift = j * 0.06;
+        el.style.left = `${((c + dx - lift) / 15) * 100}%`;
+        el.style.top = `${((r + dy - lift) / 15) * 100}%`;
+        el.style.setProperty('--s', scale);
+        el.style.zIndex = String(10 + Math.round(r * 2) + j + (top ? 1 : 0));
+        el.classList.toggle('returning', returning.has(`${m.color}-${m.i}`));
+        const count = el.querySelector('.tk-count');
+        count.textContent = `×${members.length}`;
+        count.classList.toggle('on', top && members.length > 1);
+        const valid = pickable && m.color === turnColor && t.validMoves.includes(m.i);
+        el.classList.toggle('valid', valid);
+        el.classList.toggle('dim', pickable && !valid);
+        if (valid) el.style.zIndex = '200';
       });
-    };
-
-    // Estatísticas locais em LocalStorage
-    function loadStats() {
-      try {
-        const stored = localStorage.getItem('ludo_stats_p2p');
-        if (stored) {
-          localStats = JSON.parse(stored);
-          document.getElementById('stat-matches').innerText = localStats.matches || 0;
-          document.getElementById('stat-victories').innerText = localStats.victories || 0;
-          document.getElementById('stat-captures').innerText = localStats.captures || 0;
-        }
-      } catch (e){}
-    }
-
-    function saveStats() {
-      try {
-        localStorage.setItem('ludo_stats_p2p', JSON.stringify(localStats));
-        document.getElementById('stat-matches').innerText = localStats.matches;
-        document.getElementById('stat-victories').innerText = localStats.victories;
-        document.getElementById('stat-captures').innerText = localStats.captures;
-      } catch (e){}
-    }
-
-    // Upload de Imagem de Perfil
-    function handleAvatarUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 90;
-          canvas.height = 90;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, 90, 90);
-          userAvatarBase64 = canvas.toDataURL('image/jpeg', 0.75);
-          document.getElementById('avatar-preview').src = userAvatarBase64;
-          document.getElementById('header-avatar').src = userAvatarBase64;
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-    // --- CONSTRUÇÃO DO TABULEIRO DE LUDO DE 15X15 ---
-    function setupBoardDOM() {
-      const board = document.getElementById('board');
-      board.innerHTML = '';
-
-      for (let r = 0; r < 15; r++) {
-        for (let c = 0; c < 15; c++) {
-          const cell = document.createElement('div');
-          cell.id = `cell-${r}-${c}`;
-          cell.className = 'cell';
-
-          if (r < 6 && c < 6) {
-            cell.classList.add('bg-red-home');
-            if (r >= 1 && r <= 4 && c >= 1 && c <= 4) cell.style.backgroundColor = '#ffffff';
-          } else if (r < 6 && c >= 9) {
-            cell.classList.add('bg-green-home');
-            if (r >= 1 && r <= 4 && c >= 10 && c <= 13) cell.style.backgroundColor = '#ffffff';
-          } else if (r >= 9 && c < 6) {
-            cell.classList.add('bg-blue-home');
-            if (r >= 10 && r <= 13 && c >= 1 && c <= 4) cell.style.backgroundColor = '#ffffff';
-          } else if (r >= 9 && c >= 9) {
-            cell.classList.add('bg-yellow-home');
-            if (r >= 10 && r <= 13 && c >= 10 && c <= 13) cell.style.backgroundColor = '#ffffff';
-          } else if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
-            if (r === 7 && c === 7) {
-              cell.style.backgroundColor = '#0f172a';
-              cell.innerHTML = `<i class="fa-solid fa-trophy text-amber-400 text-xs"></i>`;
-            } else if (r === 7 && c === 6) cell.classList.add('bg-red-home');
-            else if (r === 6 && c === 7) cell.classList.add('bg-green-home');
-            else if (r === 7 && c === 8) cell.classList.add('bg-yellow-home');
-            else if (r === 8 && c === 7) cell.classList.add('bg-blue-home');
-          } else if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-path');
-          else if (c === 7 && r >= 1 && r <= 5) cell.classList.add('bg-green-path');
-          else if (r === 7 && c >= 9 && c <= 13) cell.classList.add('bg-yellow-path');
-          else if (c === 7 && r >= 9 && r <= 13) cell.classList.add('bg-blue-path');
-          else if (r === 6 && c === 1) cell.classList.add('bg-red-home');
-          else if (r === 1 && c === 8) cell.classList.add('bg-green-home');
-          else if (r === 8 && c === 13) cell.classList.add('bg-yellow-home');
-          else if (r === 13 && c === 6) cell.classList.add('bg-blue-home');
-
-          if (SAFE_POSITIONS.some(([sr, sc]) => sr === r && sc === c)) {
-            cell.classList.add('bg-star');
-          }
-
-          board.appendChild(cell);
-        }
-      }
-    }
-
-    // --- COMUNICAÇÃO MULTIPLAYER PEER-TO-PEER (WEBRTC) ---
-
-    function generateRoomCode() {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      let c = '';
-      for (let i = 0; i < 4; i++) c += chars.charAt(Math.floor(Math.random() * chars.length));
-      return c;
-    }
-
-    function initPeer(peerId, callback) {
-      try {
-        peer = new Peer(peerId, {
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-          },
-          debug: 1
-        });
-
-        peer.on('open', (id) => {
-          console.log("Peer Conectado ID:", id);
-          if (callback) callback();
-        });
-
-        peer.on('connection', (conn) => {
-          handleIncomingConnection(conn);
-        });
-
-        peer.on('error', (err) => {
-          console.warn("PeerJS Warning/Error:", err);
-          // Fallback gracioso caso a conexão P2P externa falhe no ambiente atual
-          if (callback) {
-            const cb = callback;
-            callback = null;
-            cb();
-          }
-        });
-      } catch (err) {
-        console.warn("PeerJS Initialization Exception (Canvas Sandbox Fallback):", err);
-        peer = null;
-        if (callback) callback();
-      }
-    }
-
-    function handleIncomingConnection(conn) {
-      connections.push(conn);
-      conn.on('data', (data) => {
-        handlePeerData(data, conn);
-      });
-      conn.on('close', () => {
-        connections = connections.filter(c => c !== conn);
-      });
-    }
-
-    function broadcastState(state) {
-      currentGameState = state;
-      renderGameState(state);
-      connections.forEach(conn => {
-        if (conn.open) {
-          conn.send({ type: 'STATE_UPDATE', state: state });
-        }
-      });
-    }
-
-    function handlePeerData(data, conn) {
-      if (data.type === 'JOIN_REQUEST') {
-        if (!isHost) return;
-        if (currentGameState.players.length >= 4 || currentGameState.status !== 'waiting') {
-          conn.send({ type: 'JOIN_REJECTED', reason: 'Sala cheia ou jogo em andamento.' });
-          return;
-        }
-
-        const assignedColor = PLAYER_COLORS[currentGameState.players.length];
-        const newPlayer = {
-          id: data.player.id,
-          name: data.player.name,
-          avatar: data.player.avatar,
-          color: assignedColor
-        };
-
-        currentGameState.players.push(newPlayer);
-        broadcastState(currentGameState);
-      } else if (data.type === 'STATE_UPDATE') {
-        currentGameState = data.state;
-        renderGameState(currentGameState);
-      } else if (data.type === 'MOVE_PAWN' || data.type === 'ROLL_DICE') {
-        if (isHost) {
-          processPlayerAction(data);
-        }
-      }
-    }
-
-    // --- CRIAÇÃO E ENTRADA EM SALAS ---
-
-    function getUserName() {
-      const nameInput = document.getElementById('input-username').value.trim();
-      return nameInput || 'Jogador ' + Math.floor(Math.random() * 1000);
-    }
-
-    function createRoom() {
-      const username = getUserName();
-      document.getElementById('header-name').innerText = username;
-      roomCode = generateRoomCode();
-      isHost = true;
-
-      const fullPeerId = 'ludo-room-' + roomCode;
-      
-      initPeer(fullPeerId, () => {
-        currentGameState = {
-          code: roomCode,
-          status: 'waiting',
-          currentTurnIndex: 0,
-          diceValue: null,
-          hasRolled: false,
-          turnTimeLeft: 40,
-          winner: null,
-          players: [
-            {
-              id: myId,
-              name: username,
-              avatar: userAvatarBase64,
-              color: PLAYER_COLORS[0]
-            }
-          ],
-          pawns: {
-            red: [-1, -1, -1, -1],
-            green: [-1, -1, -1, -1],
-            yellow: [-1, -1, -1, -1],
-            blue: [-1, -1, -1, -1]
-          }
-        };
-
-        switchToGameScreen();
-        renderGameState(currentGameState);
-        startTimerLoop();
-      });
-    }
-
-    function joinRoom() {
-      const codeInput = document.getElementById('input-room-code').value.trim().toUpperCase();
-      if (codeInput.length !== 4) {
-        showMsgModal('Código Inválido', 'Insira um código de sala válido com 4 letras.');
-        return;
-      }
-
-      const username = getUserName();
-      document.getElementById('header-name').innerText = username;
-      roomCode = codeInput;
-      isHost = false;
-
-      initPeer(myId, () => {
-        // Se o peer não puder ser inicializado devido a restrições do navegador/sandbox
-        if (!peer) {
-          console.warn("Modo P2P indisponível neste ambiente. Inicializando sala em modo de teste local.");
-          currentGameState = {
-            code: roomCode,
-            status: 'waiting',
-            currentTurnIndex: 0,
-            diceValue: null,
-            hasRolled: false,
-            turnTimeLeft: 40,
-            winner: null,
-            players: [
-              {
-                id: myId,
-                name: username,
-                avatar: userAvatarBase64,
-                color: PLAYER_COLORS[0]
-              }
-            ],
-            pawns: {
-              red: [-1, -1, -1, -1],
-              green: [-1, -1, -1, -1],
-              yellow: [-1, -1, -1, -1],
-              blue: [-1, -1, -1, -1]
-            }
-          };
-          switchToGameScreen();
-          renderGameState(currentGameState);
-          return;
-        }
-
-        const hostPeerId = 'ludo-room-' + roomCode;
-        try {
-          const conn = peer.connect(hostPeerId);
-
-          if (!conn) {
-            throw new Error("Conexão nula retornada");
-          }
-
-          conn.on('open', () => {
-            connections.push(conn);
-            conn.send({
-              type: 'JOIN_REQUEST',
-              player: {
-                id: myId,
-                name: username,
-                avatar: userAvatarBase64
-              }
-            });
-            switchToGameScreen();
-          });
-
-          conn.on('data', (data) => {
-            handlePeerData(data, conn);
-          });
-
-          conn.on('error', (err) => {
-            showMsgModal('Erro de Conexão', 'Não foi possível conectar à sala especificada.');
-          });
-        } catch(e) {
-          console.warn("Erro ao tentar conectar via Peer:", e);
-          switchToGameScreen();
-        }
-      });
-    }
-
-    function switchToGameScreen() {
-      document.getElementById('lobby-screen').classList.add('hidden');
-      document.getElementById('game-screen').classList.remove('hidden');
-      document.getElementById('display-room-code').innerText = roomCode;
-    }
-
-    // --- REGRAS E LÓGICA DO LUDO ---
-
-    function startGame() {
-      if (!isHost || !currentGameState) return;
-      if (currentGameState.players.length < 1) return;
-
-      currentGameState.status = 'playing';
-      currentGameState.currentTurnIndex = 0;
-      currentGameState.diceValue = null;
-      currentGameState.hasRolled = false;
-      currentGameState.turnTimeLeft = 40;
-
-      localStats.matches += 1;
-      saveStats();
-
-      broadcastState(currentGameState);
-    }
-
-    function rollDice() {
-      if (!currentGameState || currentGameState.status !== 'playing') return;
-
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (!activePlayer || activePlayer.id !== myId) return;
-      if (currentGameState.hasRolled) return;
-
-      if (!isHost) {
-        connections[0]?.send({ type: 'ROLL_DICE' });
-        return;
-      }
-
-      executeRollDice();
-    }
-
-    function executeRollDice() {
-      const val = Math.floor(Math.random() * 6) + 1;
-      currentGameState.diceValue = val;
-      currentGameState.hasRolled = true;
-
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      const validMoves = getValidMoves(activePlayer.color, val);
-
-      if (validMoves.length === 0) {
-        setTimeout(() => {
-          nextTurn();
-        }, 1200);
-      }
-
-      broadcastState(currentGameState);
-    }
-
-    function getValidMoves(color, diceVal) {
-      const pawns = currentGameState.pawns[color];
-      const moves = [];
-
-      pawns.forEach((pos, index) => {
-        if (pos === -1) {
-          if (diceVal === 6) moves.push(index);
-        } else if (pos >= 0 && pos < 56) {
-          if (pos + diceVal <= 56) moves.push(index);
-        }
-      });
-
-      return moves;
-    }
-
-    function selectPawnToMove(pawnIndex) {
-      if (!currentGameState || currentGameState.status !== 'playing') return;
-      const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-      if (!activePlayer || activePlayer.id !== myId || !currentGameState.hasRolled) return;
-
-      const validMoves = getValidMoves(activePlayer.color, currentGameState.diceValue);
-      if (!validMoves.includes(pawnIndex)) return;
-
-      if (!isHost) {
-        connections[0]?.send({ type: 'MOVE_PAWN', pawnIndex: pawnIndex });
-        return;
-      }
-
-      executeMovePawn(activePlayer.color, pawnIndex);
-    }
-
-    function executeMovePawn(color, pawnIndex) {
-      const diceVal = currentGameState.diceValue;
-      let pos = currentGameState.pawns[color][pawnIndex];
-
-      if (pos === -1 && diceVal === 6) {
-        currentGameState.pawns[color][pawnIndex] = 0;
-      } else if (pos >= 0) {
-        currentGameState.pawns[color][pawnIndex] += diceVal;
-      }
-
-      const newPos = currentGameState.pawns[color][pawnIndex];
-
-      // Verificação de Captura se a casa não for final nem casa segura (star)
-      if (newPos > 0 && newPos < 51) {
-        checkCaptures(color, newPos);
-      }
-
-      // Checar Vitória
-      if (currentGameState.pawns[color].every(p => p === 56)) {
-        currentGameState.status = 'finished';
-        currentGameState.winner = currentGameState.players[currentGameState.currentTurnIndex];
-        
-        if (currentGameState.winner.id === myId) {
-          localStats.victories += 1;
-          saveStats();
-        }
-
-        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-        broadcastState(currentGameState);
-        return;
-      }
-
-      // Se tirou 6, ganha outro turno!
-      if (diceVal === 6) {
-        currentGameState.hasRolled = false;
-        currentGameState.diceValue = null;
-        currentGameState.turnTimeLeft = 40;
-        broadcastState(currentGameState);
-      } else {
-        nextTurn();
-      }
-    }
-
-    function checkCaptures(currentColor, relativePos) {
-      const targetCoords = getAbsoluteCoords(currentColor, relativePos);
-      const isSafe = SAFE_POSITIONS.some(([r, c]) => r === targetCoords[0] && c === targetCoords[1]);
-      if (isSafe) return;
-
-      PLAYER_COLORS.forEach(c => {
-        if (c === currentColor) return;
-        currentGameState.pawns[c].forEach((pPos, idx) => {
-          if (pPos >= 0 && pPos < 51) {
-            const pCoords = getAbsoluteCoords(c, pPos);
-            if (pCoords[0] === targetCoords[0] && pCoords[1] === targetCoords[1]) {
-              // Peão capturado volta para a base!
-              currentGameState.pawns[c][idx] = -1;
-              if (currentGameState.players[currentGameState.currentTurnIndex]?.id === myId) {
-                localStats.captures += 1;
-                saveStats();
-              }
-            }
-          }
-        });
-      });
-    }
-
-    function getAbsoluteCoords(color, relPos) {
-      if (relPos === -1) return null;
-      if (relPos < 51) {
-        const globalIdx = (START_INDEX[color] + relPos) % MAIN_CIRCUIT.length;
-        return MAIN_CIRCUIT[globalIdx];
-      } else {
-        const homeIdx = relPos - 51;
-        return HOME_STRETCH[color][homeIdx];
-      }
-    }
-
-    function nextTurn() {
-      currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.players.length;
-      currentGameState.hasRolled = false;
-      currentGameState.diceValue = null;
-      currentGameState.turnTimeLeft = 40;
-      broadcastState(currentGameState);
-    }
-
-    function processPlayerAction(data) {
-      if (data.type === 'ROLL_DICE') {
-        if (!currentGameState.hasRolled) executeRollDice();
-      } else if (data.type === 'MOVE_PAWN') {
-        const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-        if (currentGameState.hasRolled) {
-          executeMovePawn(activePlayer.color, data.pawnIndex);
-        }
-      }
-    }
-
-    // --- TIMER DE 40s E JOGADA AUTOMÁTICA ---
-
-    function startTimerLoop() {
-      if (turnTimerInterval) clearInterval(turnTimerInterval);
-
-      turnTimerInterval = setInterval(() => {
-        if (!isHost || !currentGameState || currentGameState.status !== 'playing') return;
-
-        currentGameState.turnTimeLeft -= 1;
-
-        if (currentGameState.turnTimeLeft <= 0) {
-          const activePlayer = currentGameState.players[currentGameState.currentTurnIndex];
-
-          if (!currentGameState.hasRolled) {
-            const val = Math.floor(Math.random() * 6) + 1;
-            currentGameState.diceValue = val;
-            currentGameState.hasRolled = true;
-
-            const validMoves = getValidMoves(activePlayer.color, val);
-            if (validMoves.length > 0) {
-              const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
-              executeMovePawn(activePlayer.color, randomPawn);
-            } else {
-              nextTurn();
-            }
-          } else {
-            const validMoves = getValidMoves(activePlayer.color, currentGameState.diceValue);
-            if (validMoves.length > 0) {
-              const randomPawn = validMoves[Math.floor(Math.random() * validMoves.length)];
-              executeMovePawn(activePlayer.color, randomPawn);
-            } else {
-              nextTurn();
-            }
-          }
-        } else {
-          broadcastState(currentGameState);
-        }
-      }, 1000);
-    }
-
-    // --- RENDERIZAÇÃO DA INTERFACE NATIVA ---
-
-    function renderGameState(state) {
-      if (!state) return;
-
-      // Renderizar Código da Sala
-      document.getElementById('display-room-code').innerText = state.code;
-
-      // Renderizar Jogadores na Lista
-      const playersList = document.getElementById('players-list');
-      document.getElementById('player-count').innerText = state.players.length;
-      
-      const badge = document.getElementById('room-status-badge');
-      if (state.status === 'waiting') {
-        badge.innerText = 'Aguardando';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
-      } else if (state.status === 'playing') {
-        badge.innerText = 'Em Jogo';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-      } else {
-        badge.innerText = 'Finalizado';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30';
-      }
-
-      playersList.innerHTML = state.players.map((p, idx) => {
-        const isCurrentTurn = state.status === 'playing' && idx === state.currentTurnIndex;
-        return `
-          <div class="flex items-center justify-between p-2 rounded-xl border ${isCurrentTurn ? 'bg-indigo-900/40 border-indigo-500 ring-2 ring-indigo-500/30' : 'bg-slate-900/60 border-slate-700/60'} transition">
-            <div class="flex items-center space-x-2.5">
-              <img src="${p.avatar}" class="w-8 h-8 rounded-full object-cover border border-slate-600"/>
-              <div>
-                <span class="text-xs font-bold text-white block leading-tight">${p.name} ${p.id === myId ? '(Você)' : ''}</span>
-                <span class="text-[10px] font-semibold uppercase tracking-wider text-${p.color}-400">${COLOR_NAMES[p.color]}</span>
-              </div>
-            </div>
-            ${isCurrentTurn ? '<span class="text-xs font-black text-amber-400 animate-pulse"><i class="fa-solid fa-play"></i></span>' : ''}
-          </div>
-        `;
-      }).join('');
-
-      // Exibir botão de início para o Host
-      const btnStart = document.getElementById('btn-start-game');
-      if (isHost && state.status === 'waiting') {
-        btnStart.classList.remove('hidden');
-      } else {
-        btnStart.classList.add('hidden');
-      }
-
-      // Atualizar Timer
-      const timerText = document.getElementById('timer-text');
-      const timerBar = document.getElementById('timer-bar');
-      const timeLeft = state.turnTimeLeft || 40;
-      timerText.innerText = `${timeLeft}s`;
-      timerBar.style.width = `${(timeLeft / 40) * 100}%`;
-
-      // Atualizar Dado
-      const diceContainer = document.getElementById('dice-container');
-      const diceValueEl = document.getElementById('dice-value');
-      const btnRoll = document.getElementById('btn-roll-dice');
-      const statusTurnDesc = document.getElementById('status-turn-desc');
-
-      if (state.diceValue) {
-        const diceIcons = ['', 'fa-dice-one', 'fa-dice-two', 'fa-dice-three', 'fa-dice-four', 'fa-dice-five', 'fa-dice-six'];
-        diceValueEl.innerHTML = `<i class="fa-solid ${diceIcons[state.diceValue]}"></i>`;
-      } else {
-        diceValueEl.innerHTML = `<i class="fa-solid fa-dice-d6"></i>`;
-      }
-
-      const activePlayer = state.players[state.currentTurnIndex];
-      if (state.status === 'playing' && activePlayer) {
-        if (activePlayer.id === myId) {
-          statusTurnDesc.innerText = state.hasRolled ? 'Escolha um peão para mover!' : 'Sua vez de jogar!';
-          btnRoll.disabled = state.hasRolled;
-        } else {
-          statusTurnDesc.innerText = `Vez de ${activePlayer.name}...`;
-          btnRoll.disabled = true;
-        }
-      } else if (state.status === 'finished') {
-        statusTurnDesc.innerText = `🎉 Vitória de ${state.winner?.name}!`;
-        btnRoll.disabled = true;
-      }
-
-      // Renderizar Peões no Tabuleiro
-      renderPawnsOnBoard(state);
-    }
-
-    function renderPawnsOnBoard(state) {
-      // Limpar peões anteriores
-      document.querySelectorAll('.pawn').forEach(el => el.remove());
-
-      if (!state || !state.pawns) return;
-
-      const activePlayer = state.players[state.currentTurnIndex];
-      const isMyTurn = activePlayer && activePlayer.id === myId && state.hasRolled;
-      const validMoves = isMyTurn ? getValidMoves(activePlayer.color, state.diceValue) : [];
-
-      PLAYER_COLORS.forEach(color => {
-        const playerObj = state.players.find(p => p.color === color);
-        const avatarSrc = playerObj ? playerObj.avatar : userAvatarBase64;
-        const pawnPositions = state.pawns[color];
-
-        pawnPositions.forEach((pos, pawnIndex) => {
-          let targetCellId = null;
-
-          if (pos === -1) {
-            const [r, c] = HOME_BASE_COORDS[color][pawnIndex];
-            targetCellId = `cell-${r}-${c}`;
-          } else {
-            const coords = getAbsoluteCoords(color, pos);
-            if (coords) {
-              targetCellId = `cell-${coords[0]}-${coords[1]}`;
-            }
-          }
-
-          if (targetCellId) {
-            const cell = document.getElementById(targetCellId);
-            if (cell) {
-              const pawnEl = document.createElement('div');
-              pawnEl.className = `pawn bg-${color}-home`;
-              
-              if (isMyTurn && activePlayer.color === color && validMoves.includes(pawnIndex)) {
-                pawnEl.classList.add('movable');
-                pawnEl.onclick = (e) => {
-                  e.stopPropagation();
-                  selectPawnToMove(pawnIndex);
-                };
-              }
-
-              pawnEl.innerHTML = `<img src="${avatarSrc}" class="pawn-avatar"/>`;
-              cell.appendChild(pawnEl);
-            }
-          }
-        });
-      });
-    }
-
-    // --- MODAIS E UTILITÁRIOS ---
-
-    function toggleQRModal() {
-      const modal = document.getElementById('qr-modal');
-      const isHidden = modal.classList.contains('hidden');
-      if (isHidden) {
-        modal.classList.remove('hidden');
-        generateQRCode();
-      } else {
-        modal.classList.add('hidden');
-      }
-    }
-
-    function generateQRCode() {
-      const container = document.getElementById('qrcode-container');
-      container.innerHTML = '';
-      const roomUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-      document.getElementById('qr-room-link').innerText = roomUrl;
-
-      new QRCode(container, {
-        text: roomUrl,
-        width: 160,
-        height: 160,
-        colorDark: "#0f172a",
-        colorLight: "#ffffff"
-      });
-    }
-
-    function copyRoomLink() {
-      const roomUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-      
-      const tempInput = document.createElement('input');
-      tempInput.value = roomUrl;
-      document.body.appendChild(tempInput);
-      tempInput.select();
-      document.execCommand('copy');
-      document.body.removeChild(tempInput);
-
-      showMsgModal('Link Copiado!', 'O link da sala foi copiado para a área de transferência.');
-    }
-
-    function toggleStatsModal() {
-      const modal = document.getElementById('stats-modal');
-      modal.classList.toggle('hidden');
-    }
-
-    function showMsgModal(title, body) {
-      document.getElementById('msg-title').innerText = title;
-      document.getElementById('msg-body').innerText = body;
-      document.getElementById('msg-modal').classList.remove('hidden');
-    }
-
-    function closeMsgModal() {
-      document.getElementById('msg-modal').classList.add('hidden');
-    }
-  </script>
+    });
+  }
+}
+
+/* ---------- Renderização ---------- */
+function render() {
+  if (!Game.state) return;
+  renderStatus();
+  renderPlayers();
+  renderDicePanel();
+  renderSixes();
+  renderHistory();
+  renderBaseLabels();
+  layoutTokens();
+  const pb = $('#btn-pause');
+  pb.innerHTML = `<i class="fa-solid ${Game.paused ? 'fa-play' : 'fa-pause'}"></i>`;
+  pb.setAttribute('aria-label', Game.paused ? 'Continuar' : 'Pausar');
+  updateMuteButtons();
+}
+
+function renderStatus() {
+  const s = Game.state;
+  const el = $('#status');
+  el.textContent = '';
+  if (s.phase === 'finished') { el.style.setProperty('--c', '#64748b'); el.textContent = 'Partida encerrada'; return; }
+  if (s.phase === 'choosingFirst') { el.textContent = 'Sorteando quem começa…'; return; }
+  const seat = currentSeat();
+  el.style.setProperty('--c', `var(--${seat.color})`);
+  if (Game.statusOverride) { el.textContent = Game.statusOverride; return; }
+  if (Game.paused) { el.textContent = 'Jogo pausado'; return; }
+  const human = !isAuto(seat);
+  let action;
+  if (human) action = s.turn.awaiting === 'roll' ? 'role o dado' : 'escolha um peão';
+  else action = s.turn.awaiting === 'roll' ? 'vai rolar…' : 'pensando…';
+  el.append('Vez de ', h('strong', { text: seat.name }), seat.isBot ? ' 🤖' : '', seat.afk ? ' (ausente)' : '', ` ${CMETA[seat.color].sym} — ${action}`);
+}
+
+function renderPlayers() {
+  const s = Game.state;
+  const list = $('#players');
+  list.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉', '4º'];
+  for (const seat of s.seats) {
+    const home = s.pieces[seat.color].filter(r => r === E.GOAL).length;
+    const current = s.phase === 'playing' && s.turn.seat === seat.seat;
+    const tags = [];
+    if (seat.isBot) tags.push(h('span', { class: 'badge', text: `🤖 ${LEVEL_NAME[seat.botLevel]}` }));
+    if (seat.afk) tags.push(h('span', { class: 'badge !bg-amber-500/30', text: 'ausente' }));
+    list.append(h('div', { class: 'player-row' + (current ? ' current' : '') + (seat.finishedRank ? ' done' : ''), style: `--c:var(--${seat.color})` },
+      avatarEl(seat.avatar, seat.color),
+      h('div', { class: 'flex-1 min-w-0' },
+        h('div', { class: 'font-semibold truncate', text: seatLabel(seat) }),
+        h('div', { class: 'flex items-center gap-1 flex-wrap text-xs text-slate-400' }, `${home}/4 no centro`, ...tags)),
+      seat.finishedRank ? h('span', { class: 'text-xl', text: medals[seat.finishedRank - 1] }) : null));
+  }
+}
+
+function renderDicePanel() {
+  const s = Game.state;
+  const btn = $('#die-btn');
+  const playing = s.phase === 'playing';
+  const seat = playing ? currentSeat() : null;
+  const canRoll = playing && !Game.busy && !Game.paused && s.turn.awaiting === 'roll' && !isAuto(seat);
+  btn.disabled = !canRoll;
+  if (Game.die) Game.die.el.style.setProperty('--c', seat ? `var(--${seat.color})` : '#e2e8f0');
+  const hint = $('#die-hint');
+  if (!playing) hint.textContent = s.phase === 'finished' ? 'Fim de jogo' : '';
+  else if (canRoll) hint.innerHTML = '<strong class="text-white">Toque no dado</strong><br><span class="text-xs text-slate-400">ou aperte Espaço</span>';
+  else if (!isAuto(seat) && s.turn.awaiting === 'move' && !Game.busy) hint.innerHTML = '<strong class="text-white">Escolha um peão</strong><br><span class="text-xs text-slate-400">clique nele ou use as teclas 1–4</span>';
+  else hint.textContent = `Vez de ${seat.name}`;
+}
+
+function renderSixes() {
+  const s = Game.state;
+  const el = $('#sixes');
+  if (!s.rules.threeSixesLimit || s.phase !== 'playing') { el.textContent = ''; return; }
+  const n = Math.min(3, s.turn.consecutiveSixes || 0);
+  el.textContent = '●'.repeat(n) + '○'.repeat(3 - n);
+  el.title = `${n} seis seguido(s)`;
+}
+
+function renderHistory() {
+  const ul = $('#history');
+  ul.innerHTML = '';
+  const log = (Game.state.log || []).slice().reverse();
+  if (!log.length) ul.append(h('li', { class: 'text-slate-500', text: 'Nenhuma jogada ainda' }));
+  log.forEach((t, i) => ul.append(h('li', { class: i === 0 ? 'text-white' : '', text: t })));
+}
+
+function renderBaseLabels() {
+  const s = Game.state;
+  document.querySelectorAll('[data-base-label]').forEach(el => {
+    const color = el.getAttribute('data-base-label');
+    const seat = s.seats.find(x => x.color === color);
+    el.textContent = seat ? seat.name : '';
+    el.style.setProperty('--c', `var(--${color})`);
+    el.classList.toggle('turn', !!seat && s.phase === 'playing' && currentSeat().color === color);
+  });
+}
+
+// Barra do timer, guiada pelo deadline
+function tickTimer() {
+  const s = Game.state;
+  const wrap = $('#timer-wrap');
+  if (s && s.turn && s.turn.deadline && !Game.paused && !$('#screen-game').hidden) {
+    const left = Math.max(0, s.turn.deadline - Date.now());
+    wrap.hidden = false;
+    $('#timer-fill').style.width = `${(left / Game.turnMs) * 100}%`;
+    $('#timer-text').textContent = `${Math.ceil(left / 1000)}s para jogar`;
+  } else {
+    wrap.hidden = true;
+  }
+  requestAnimationFrame(tickTimer);
+}
+
+/* ---------- Modais da partida ---------- */
+function rulesSummary(rules) {
+  const yes = (b) => (b ? 'sim' : 'não');
+  const cfg = Game.config;
+  return [
+    ['Sair da base com', rules.exitOn.join(' ou ')],
+    ['Número exato para o centro', yes(rules.exactFinish)],
+    ['Rolagem extra ao capturar', yes(rules.captureBonus)],
+    ['Rolagem extra ao chegar', yes(rules.finishBonus)],
+    ['Limite de três 6', yes(rules.threeSixesLimit)],
+    ['Penalidade dos três 6', yes(rules.threeSixesPenalty)],
+    ['Bloqueio (barreira)', yes(rules.blocks)],
+    ['Encerrar no 1º vencedor', yes(rules.endOnFirstWinner)],
+    ['Movimento automático único', yes(rules.autoSingleMove)],
+    ['Modo rápido', yes(rules.quickMode)],
+    ['Tempo por ação', cfg.timer && cfg.timer.enabled ? `${rules.quickMode ? 10 : cfg.timer.seconds}s` : 'sem limite'],
+  ];
+}
+
+function showRules() {
+  const s = Game.state;
+  let close;
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-xl font-black mb-3', text: 'Regras desta partida' }),
+    h('dl', { class: 'grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm' },
+      rulesSummary(s.rules).flatMap(([k, v]) => [h('dt', { class: 'text-slate-400', text: k }), h('dd', { class: 'font-semibold text-right', text: v })])),
+    h('p', { class: 'text-xs text-slate-400 mt-4', text: 'Casas seguras: as 4 saídas e as 4 estrelas ★. Peões de cores diferentes convivem nelas sem captura.' }),
+    h('p', { class: 'text-xs text-slate-400 mt-1', text: 'Teclado: Espaço rola o dado; 1–4 escolhem o peão.' }),
+    h('button', { class: 'btn btn-ghost w-full mt-4', onclick: () => close() }, 'Fechar')));
+}
+
+function togglePause() {
+  const s = Game.state;
+  if (!s || s.phase !== 'playing') return;
+  if (!Game.paused) {
+    Game.paused = true;
+    clearTimers();
+    if (s.turn.deadline) { Game.pausedLeft = s.turn.deadline - Date.now(); s.turn.deadline = null; }
+    render();
+    openModal(h('div', { class: 'text-center' },
+      h('div', { class: 'text-5xl mb-2', text: '⏸️' }),
+      h('h2', { class: 'text-xl font-black mb-4', text: 'Jogo pausado' }),
+      h('button', { class: 'btn btn-primary w-full', onclick: () => { document.querySelector('.modal-back')?.remove(); resume(); } }, h('i', { class: 'fa-solid fa-play' }), 'Continuar')),
+    { dismissable: false });
+  } else {
+    resume();
+  }
+  function resume() {
+    Game.paused = false;
+    if (Game.pausedLeft != null) { s.turn.deadline = Date.now() + Game.pausedLeft; Game.pausedLeft = null; }
+    proceed();
+  }
+}
+
+function confirmExit() {
+  const s = Game.state;
+  let close;
+  const finished = !s || s.phase === 'finished';
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-xl font-black mb-2', text: 'Sair para o menu?' }),
+    h('p', { class: 'text-slate-300 text-sm mb-4', text: finished ? 'A partida terminou.' : 'A partida fica salva e você pode continuar depois.' }),
+    h('div', { class: 'grid grid-cols-2 gap-2' },
+      h('button', { class: 'btn btn-ghost', onclick: () => close() }, 'Ficar'),
+      h('button', { class: 'btn btn-primary', onclick: () => { close(); leaveGame(); } }, 'Sair'))));
+}
+
+function leaveGame() {
+  clearTimers();
+  if (Game.state && Game.state.phase !== 'finished') {
+    Game.paused = false;
+    save();
+  }
+  Game.state = null;
+  document.querySelectorAll('.modal-back').forEach(m => m.remove());
+  showScreen('home');
+}
+
+function showHumansDone() {
+  const s = Game.state;
+  const humans = humanSeats();
+  const solo = humans.length === 1;
+  const text = solo ? `Você terminou em ${humans[0].finishedRank}º lugar!` : 'Todos os humanos terminaram!';
+  let close;
+  close = openModal(h('div', { class: 'text-center' },
+    h('div', { class: 'text-5xl mb-2', text: solo && humans[0].finishedRank === 1 ? '🏆' : '🎉' }),
+    h('h2', { class: 'text-xl font-black mb-1', text }),
+    h('p', { class: 'text-slate-300 text-sm mb-4', text: 'Os robôs ainda estão disputando as outras posições.' }),
+    h('div', { class: 'grid grid-cols-2 gap-2' },
+      h('button', { class: 'btn btn-ghost', onclick: () => { close(); const ev = E.endEarly(s); save(); render(); if (ev) showResults(); } }, 'Encerrar'),
+      h('button', { class: 'btn btn-primary', onclick: () => { close(); Game.fastBots = true; proceed(); } }, 'Ver o resto'))),
+  { dismissable: false });
+}
+
+function showResults() {
+  const s = Game.state;
+  clearTimers();
+  save();
+  const medals = ['🥇', '🥈', '🥉', '4º'];
+  const winner = s.seats[s.ranking[0]];
+  if (!winner.isBot) { Sound.play('win'); celebrate(true); }
+  let close;
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-2xl font-black text-center mb-1', text: winner.isBot ? `${winner.name} venceu!` : `${winner.name} venceu! 🎉` }),
+    h('p', { class: 'text-center text-slate-400 text-sm mb-4', text: 'Classificação final' }),
+    h('div', { class: 'flex flex-col gap-1' }, s.ranking.map((seatIdx, k) => {
+      const seat = s.seats[seatIdx];
+      return h('div', { class: 'player-row' + (k === 0 ? ' current' : ''), style: `--c:var(--${seat.color})` },
+        h('span', { class: 'text-2xl w-9 text-center', text: medals[k] }),
+        avatarEl(seat.avatar, seat.color),
+        h('span', { class: 'font-semibold flex-1 truncate', text: seatLabel(seat) + (seat.isBot ? ' 🤖' : '') }));
+    })),
+    h('div', { class: 'grid grid-cols-2 gap-2 mt-5' },
+      h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-house' }), 'Menu'),
+      h('button', { class: 'btn btn-primary', onclick: () => { close(); startNewGame(s.config); } }, h('i', { class: 'fa-solid fa-rotate-right' }), 'Revanche'))),
+  { dismissable: false });
+}
+
+/* ---------- Entradas globais ---------- */
+function clearAfkOnInteraction() {
+  const s = Game.state;
+  if (!s || $('#screen-game').hidden) return;
+  let changed = false;
+  s.seats.forEach(seat => { if (!seat.isBot && seat.afk) { seat.afk = false; seat.timeouts = 0; changed = true; } });
+  if (changed) { toast('Bem-vindo de volta!'); if (!Game.busy) proceed(); }
+}
+
+document.addEventListener('pointerdown', clearAfkOnInteraction, true);
+document.addEventListener('keydown', e => {
+  if ($('#screen-game').hidden || !Game.state) return;
+  if (document.querySelector('.modal-back')) return;
+  if (e.target instanceof HTMLInputElement) return;
+  clearAfkOnInteraction();
+  if (e.code === 'Space') { e.preventDefault(); actRoll(); return; }
+  const n = Number(e.key);
+  if (n >= 1 && n <= 4) {
+    const s = Game.state;
+    if (s.phase === 'playing' && canPick(currentSeat().color, n - 1)) actMove(n - 1);
+  }
+});
+
+$('#die-btn').addEventListener('click', () => actRoll());
+$('#btn-exit').addEventListener('click', confirmExit);
+$('#btn-rules').addEventListener('click', showRules);
+$('#btn-pause').addEventListener('click', togglePause);
+$('#btn-mute').setAttribute('data-mute', '');
+$('#btn-mute').addEventListener('click', () => Sound.toggle());
+
+renderHome();
+requestAnimationFrame(tickTimer);
+</script>
 </body>
 </html>
