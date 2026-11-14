@@ -1,0 +1,19 @@
+{
+  "name": "Ludo Supreme",
+  "short_name": "Ludo",
+  "description": "O Ludo clássico: jogue sozinho contra robôs, no mesmo aparelho ou em salas online com amigos.",
+  "lang": "pt-BR",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
