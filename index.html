@@ -9,6 +9,9 @@
 <script src="https://cdn.tailwindcss.com/3.4.16"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
+<!-- GoatCounter (ludo.goatcounter.com): conta a visita só pelo caminho, sem o código da sala (?room=XXXX) -->
+<script>window.goatcounter = { path: function () { return location.pathname || '/'; } };</script>
+<script data-goatcounter="https://ludo.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 <style>
   :root {
     --red: #e53935; --red-l: #ffd5d3;
@@ -686,6 +689,43 @@ const toEngineRules = (t) => ({
 
 // ---------- Utilidades ----------
 const $ = (s, el = document) => el.querySelector(s);
+
+// Eventos anônimos para o GoatCounter. Nunca quebra o jogo: se o script não carregar
+// (bloqueador, offline, file://), os eventos são simplesmente descartados.
+function track(path, title) {
+  let tries = 0;
+  const send = () => {
+    try {
+      const gc = window.goatcounter;
+      if (gc && typeof gc.count === 'function') { gc.count({ path, title: title || path, event: true }); return; }
+    } catch { return; }
+    if (++tries <= 10) setTimeout(send, 1000); // count.js carrega com async
+  };
+  send();
+}
+const defaultEngineRules = () => toEngineRules(defaultRuleToggles());
+function trackGameStart(config) {
+  const { mode, players, rules } = config;
+  track(`partida/inicio/${mode}`, `Partida iniciada (${mode})`);
+  track(`partida/jogadores/${players.length}`, `${players.length} jogadores`);
+  const bots = players.filter(p => p.isBot);
+  if (mode === 'solo') {
+    const hardest = ['hard', 'medium', 'easy'].find(l => bots.some(b => b.botLevel === l));
+    if (hardest) track(`partida/nivel/${hardest}`, `Robô mais forte: ${LEVEL_NAME[hardest]}`);
+  } else if (bots.length) {
+    track(`partida/com-robos/${mode}`, `Partida ${mode} com robôs`);
+  }
+  // Regras alteradas em relação às clássicas
+  const def = defaultEngineRules();
+  for (const [k, v] of Object.entries(rules || {})) {
+    if (JSON.stringify(v) !== JSON.stringify(def[k])) track(`regra/${k}/${k === 'exitOn' ? v.join('-') : v ? 'on' : 'off'}`, `Regra ${k} alterada`);
+  }
+  if (config.timer && config.timer.enabled) track('partida/timer', 'Partida com cronômetro');
+}
+function durationBucket(ms) {
+  const m = ms / 60000;
+  return m < 5 ? '0-5min' : m < 15 ? '5-15min' : m < 30 ? '15-30min' : m < 60 ? '30-60min' : '60min+';
+}
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -782,7 +822,7 @@ const Sound = {
       case 'nomove': this.tone(200, 0.22, 'sine', 0.1); break;
     }
   },
-  toggle() { this.muted = !this.muted; Store.set('ludo:mute', this.muted); updateMuteButtons(); },
+  toggle() { this.muted = !this.muted; Store.set('ludo:mute', this.muted); updateMuteButtons(); track(this.muted ? 'som/desligou' : 'som/ligou', 'Alternou o som'); },
 };
 function updateMuteButtons() {
   document.querySelectorAll('[data-mute]').forEach(b => {
@@ -842,6 +882,7 @@ function openAvatarPicker(onDone = renderHome) {
   fileInput.addEventListener('change', async () => {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
+    track('perfil/foto', 'Usou foto como avatar');
     try {
       profile.avatar = await processPhoto(f);
       saveProfile();
@@ -1141,6 +1182,8 @@ function startNewGame(config) {
   const state = E.createGame({ mode: config.mode, players: config.players, rules: config.rules });
   state.config = config;
   state.humansDoneHandled = false;
+  state.startedAt = Date.now();
+  trackGameStart(config);
   loadGame(state);
   runFirstDraw();
 }
@@ -1148,6 +1191,7 @@ function startNewGame(config) {
 function resumeGame(saved) {
   const state = saved.state;
   state.turn.deadline = null;
+  track(`partida/retomada/${state.mode}`, 'Partida retomada');
   loadGame(state);
   if (state.phase === 'choosingFirst') runFirstDraw();
   else proceed();
@@ -1835,6 +1879,7 @@ const Stats = {
 };
 
 function showStats() {
+  track('tela/estatisticas', 'Abriu estatísticas');
   let mode = 'solo';
   let close;
   const body = h('div', {});
@@ -1885,6 +1930,7 @@ function sendEmote(emoji) {
   const seat = s && s.seats.find(isLocalSeat);
   if (!seat || Date.now() - lastEmoteAt < EMOTE_COOLDOWN) return;
   lastEmoteAt = Date.now();
+  track('online/emote', 'Enviou emote');
   const btns = [...document.querySelectorAll('.emote-btn')];
   btns.forEach(b => { b.disabled = true; });
   setTimeout(() => btns.forEach(b => { b.disabled = false; }), EMOTE_COOLDOWN);
@@ -1929,6 +1975,7 @@ function rulesSummary(rules) {
 }
 
 function showRules() {
+  track('tela/regras', 'Abriu regras');
   const s = Game.state;
   let close;
   close = openModal(h('div', {},
@@ -1982,6 +2029,7 @@ function leaveGame() {
   clearTimers();
   if (Net.role) netLeave();
   else if (Game.state && Game.state.phase !== 'finished') {
+    track(`partida/abandonada/${Game.state.mode}`, 'Saiu no meio da partida');
     Game.paused = false;
     save();
   }
@@ -2001,8 +2049,8 @@ function showHumansDone() {
     h('h2', { class: 'text-xl font-black mb-1', text }),
     h('p', { class: 'text-slate-300 text-sm mb-4', text: 'Os robôs ainda estão disputando as outras posições.' }),
     h('div', { class: 'grid grid-cols-2 gap-2' },
-      h('button', { class: 'btn btn-ghost', onclick: () => { close(); const ev = E.endEarly(s); save(); render(); if (ev) showResults(); } }, 'Encerrar'),
-      h('button', { class: 'btn btn-primary', onclick: () => { close(); Game.fastBots = true; proceed(); } }, 'Ver o resto'))),
+      h('button', { class: 'btn btn-ghost', onclick: () => { close(); track('partida/encerrou-cedo', 'Encerrou após os humanos terminarem'); const ev = E.endEarly(s); save(); render(); if (ev) showResults(); } }, 'Encerrar'),
+      h('button', { class: 'btn btn-primary', onclick: () => { close(); track('partida/ver-o-resto', 'Assistiu os robôs terminarem'); Game.fastBots = true; proceed(); } }, 'Ver o resto'))),
   { dismissable: false });
 }
 
@@ -2012,6 +2060,15 @@ function showResults() {
   Game.resultsShown = true;
   clearTimers();
   if (Net.role !== 'client') save();
+  if (Net.role !== 'client') {
+    track(`partida/fim/${s.mode}`, `Partida concluída (${s.mode})`);
+    if (s.startedAt) track(`partida/duracao/${durationBucket(Date.now() - s.startedAt)}`, 'Duração da partida');
+  }
+  const mine = s.seats.filter(isLocalSeat);
+  if (mine.length && s.mode !== 'local') {
+    const best = Math.min(...mine.map(x => x.finishedRank || 99));
+    track(`partida/resultado/${s.mode}/${best === 1 ? 'venceu' : best <= 3 ? 'podio' : 'perdeu'}`, 'Resultado do jogador');
+  }
   Stats.finish(s);
   const medals = ['🥇', '🥈', '🥉', '4º'];
   const winners = s.seats.filter(x => x.finishedRank === 1);
@@ -2035,7 +2092,7 @@ function showResults() {
         h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-door-open' }), 'Sair da sala'))
       : h('div', { class: 'grid grid-cols-2 gap-2 mt-5' },
         h('button', { class: 'btn btn-ghost', onclick: () => { close(); leaveGame(); } }, h('i', { class: 'fa-solid fa-house' }), 'Menu'),
-        h('button', { class: 'btn btn-primary', onclick: () => { close(); if (Net.role === 'host') hostBackToLobby(); else startNewGame(s.config); } }, h('i', { class: 'fa-solid fa-rotate-right' }), 'Revanche'))),
+        h('button', { class: 'btn btn-primary', onclick: () => { close(); track(`partida/revanche/${s.mode}`, 'Revanche'); if (Net.role === 'host') hostBackToLobby(); else startNewGame(s.config); } }, h('i', { class: 'fa-solid fa-rotate-right' }), 'Revanche'))),
   { dismissable: false });
 }
 
@@ -2250,6 +2307,7 @@ function netFail(err) {
   netShutdown();
   clearRoomUrl();
   const type = err && err.type;
+  track(`sala/erro/${type || (err && /carregar/.test(err.message || '') ? 'lib' : 'outro')}`, 'Falha de conexão');
   let msg = 'Não foi possível conectar.';
   if (type === 'browser-incompatible') msg = 'Este navegador não suporta salas online.';
   else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(type)) msg = 'Sem conexão com o servidor de salas.';
@@ -2333,6 +2391,7 @@ async function hostRoom(restore, { takeover = false } = {}) {
     };
   }
   setRoomUrl(code);
+  track(takeover ? 'sala/troca-anfitriao' : restore ? 'sala/reaberta' : 'sala/criada', 'Sala aberta pelo anfitrião');
   clearInterval(Net.hb);
   Net.hb = setInterval(hostHeartbeat, 5000);
 
@@ -2636,6 +2695,7 @@ function clientHandle(msg) {
   switch (msg.type) {
     case 'WELCOME':
       hideConnecting();
+      if (!Net.everConnected) track(p.spectator ? 'sala/entrou-espectador' : 'sala/entrou', 'Entrou em uma sala');
       Net.everConnected = true;
       Net.spectator = !!p.spectator;
       Net.myId = p.id;
@@ -2782,11 +2842,13 @@ function openJoin(code) {
 }
 
 async function copyLink(link) {
+  track('convite/copiar-link', 'Copiou o link da sala');
   try { await navigator.clipboard.writeText(link); toast('Link copiado!'); }
   catch { toast(link); }
 }
 
 async function showQr(link) {
+  track('convite/qr', 'Abriu o QR Code da sala');
   try { if (!window.QRCode) await loadScript(QRCODE_URL); } catch { toast('Não foi possível gerar o QR Code.'); return; }
   const box = h('div', { class: 'bg-white p-3 rounded-xl mx-auto w-fit my-4' });
   new window.QRCode(box, { text: link, width: 220, height: 220 });
@@ -2876,7 +2938,7 @@ function renderLobby() {
       h('div', { class: 'flex gap-2 justify-center flex-wrap' },
         h('button', { class: 'btn btn-ghost', onclick: () => copyLink(link) }, h('i', { class: 'fa-solid fa-link' }), 'Copiar link'),
         h('button', { class: 'btn btn-ghost', onclick: () => showQr(link) }, h('i', { class: 'fa-solid fa-qrcode' }), 'QR Code'),
-        navigator.share ? h('button', { class: 'btn btn-ghost', onclick: () => navigator.share({ title: 'Ludo Supreme', text: `Vem jogar Ludo! Sala ${L.code}`, url: link }).catch(() => {}) },
+        navigator.share ? h('button', { class: 'btn btn-ghost', onclick: () => track('convite/compartilhar', 'Compartilhou a sala') || navigator.share({ title: 'Ludo Supreme', text: `Vem jogar Ludo! Sala ${L.code}`, url: link }).catch(() => {}) },
           h('i', { class: 'fa-solid fa-share-nodes' }), 'Enviar') : null)),
     Net.spectator ? h('p', { class: 'text-center text-amber-300 text-sm', text: 'Você está assistindo esta sala.' }) : null,
     h('div', { class: 'grid sm:grid-cols-2 gap-2' }, E.COLORS.map(seatCard)),
@@ -2928,6 +2990,7 @@ $('#btn-mute').addEventListener('click', () => Sound.toggle());
     const hostSave = Store.get('ludo:host:' + room, null);
     if (hostSave) { hostRoom(hostSave); return; }
     if (Store.get('ludo:session:' + room, null)) { joinRoom(room); return; }
+    track('convite/abriu-link', 'Abriu um link de convite');
     openJoin(room);
     return;
   }
