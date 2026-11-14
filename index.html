@@ -8,6 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='2' height='2' fill='%23e53935'/%3E%3Crect x='2' width='2' height='2' fill='%232e9e4f'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23f4b400'/%3E%3Crect y='2' width='2' height='2' fill='%231e88e5'/%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com/3.4.16"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Bungee&family=Permanent+Marker&family=Special+Elite&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
 <!-- GoatCounter (ludo.goatcounter.com): conta a visita só pelo caminho, sem o código da sala (?room=XXXX) -->
 <script>window.goatcounter = { path: function () { return location.pathname || '/'; } };</script>
@@ -129,6 +130,114 @@
     .token.valid .tk-body { animation: none; box-shadow: 0 0 0 .9cqw rgba(15, 23, 42, .85); }
     .die.rolling, .die-btn:not(:disabled) .die { animation: none; }
   }
+  /* ---------- Adesivos de captura (só na tela de quem teve o peão preso) ---------- */
+  .stk { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.62); pointer-events: none; z-index: 260; }
+  .stk-in { --rot: -6deg; transform: rotate(var(--rot)); }
+  .stk-diecut { filter: drop-shadow(1.1cqw 0 0 #fff) drop-shadow(-1.1cqw 0 0 #fff) drop-shadow(0 1.1cqw 0 #fff) drop-shadow(0 -1.1cqw 0 #fff) drop-shadow(0 1.6cqw 1.8cqw rgba(0,0,0,.55)); }
+  .stk-flat { filter: drop-shadow(0 1.4cqw 1.6cqw rgba(0,0,0,.5)); }
+  .stk-in.slap { animation: stkSlap .5s cubic-bezier(.2,1.5,.4,1) both; }
+  .stk-in.peel { animation: stkPeel .55s cubic-bezier(.5,0,.8,.4) forwards; }
+  @keyframes stkSlap { 0% { transform: rotate(calc(var(--rot) - 28deg)) scale(2.6); opacity: 0; } 55% { transform: rotate(calc(var(--rot) + 2deg)) scale(.93); opacity: 1; } 100% { transform: rotate(var(--rot)) scale(1); opacity: 1; } }
+  @keyframes stkPeel { 0% { transform: rotate(var(--rot)); opacity: 1; } 30% { transform: translate(2%, -2%) rotate(calc(var(--rot) + 6deg)) scale(1.04); opacity: 1; } 100% { transform: translate(30%, -90%) rotate(calc(var(--rot) + 38deg)) scale(.7); opacity: 0; } }
+  .stk-face { position: relative; overflow: hidden; font-family: system-ui, sans-serif; }
+  .stk-face::after { content: ""; position: absolute; inset: -20%; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.55) 50%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+  .slap .stk-face::after { animation: stkShine .9s .45s ease-out both; }
+  @keyframes stkShine { to { transform: translateX(120%); } }
+  .board-wrap.stk-dim::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, rgba(10,14,30,.25), rgba(10,14,30,.65)); z-index: 250; pointer-events: none; animation: stkDim 3.4s ease both; }
+  @keyframes stkDim { 0%, 100% { opacity: 0; } 8%, 85% { opacity: 1; } }
+  .board-wrap.stk-shake { animation: stkShake .42s cubic-bezier(.36,.07,.19,.97); }
+  @keyframes stkShake { 10%, 90% { transform: translate(-1px, 0); } 20%, 80% { transform: translate(3px, 1px); } 30%, 50%, 70% { transform: translate(-6px, -2px) rotate(-.4deg); } 40%, 60% { transform: translate(6px, 2px) rotate(.4deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .stk-in.slap { animation: stkFadeIn .2s both; } .stk-in.peel { animation: stkFadeOut .25s forwards; }
+    .slap .stk-face::after, .board-wrap.stk-shake { animation: none; }
+    @keyframes stkFadeIn { from { opacity: 0; } } @keyframes stkFadeOut { to { opacity: 0; } }
+  }
+  .stk-tag { display: inline-flex; align-items: center; gap: .3em; font-weight: 700; white-space: nowrap; }
+  .stk-dot { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; color: #fff; font-size: .8em; box-shadow: 0 0 0 .15em #fff; }
+  .stk h3, .sst h3 { font-weight: 400; margin: 0; }
+  /* 1 · Explosão */
+  .stk-boom .stk-face { width: 70cqw; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1.2cqw; background: radial-gradient(circle at 50% 45%, #fff3a6 0%, #ffd23f 30%, #ff8a1f 62%, #e53935 100%); }
+  .stk-boom h3 { font-family: "Bangers", Impact, sans-serif; font-size: 18cqw; line-height: .85; color: #fff; letter-spacing: .02em; -webkit-text-stroke: 1cqw #2b0d0d; paint-order: stroke fill; text-shadow: 0 1.2cqw 0 #2b0d0d; transform: rotate(-4deg); }
+  .stk-boom .stk-sub { font-size: 3.2cqw; color: #2b0d0d; background: rgba(255,255,255,.88); padding: .8cqw 2.2cqw; border-radius: 99px; max-width: 50cqw; display: flex; flex-wrap: wrap; justify-content: center; gap: .3cqw 1cqw; }
+  .stk-boom .stk-phrase { font-family: "Bangers", Impact, sans-serif; font-size: 6.2cqw; color: #2b0d0d; letter-spacing: .03em; max-width: 46cqw; line-height: 1; }
+  /* 2 · Gibi */
+  .stk-comic .stk-face { width: 74cqw; aspect-ratio: 5 / 4; background: radial-gradient(circle, rgba(200,30,30,.28) 24%, transparent 26%) 0 0 / 2.4cqw 2.4cqw, linear-gradient(160deg, #ffe066, #ffc21a); border: 1.1cqw solid #111; padding: 3cqw; display: flex; flex-direction: column; justify-content: space-between; }
+  .stk-comic .stk-caption { align-self: flex-start; background: #fffbe6; border: .6cqw solid #111; padding: .8cqw 1.8cqw; font-family: "Bangers", Impact, sans-serif; font-size: 3.6cqw; letter-spacing: .06em; color: #111; transform: rotate(-1deg); }
+  .stk-comic h3 { text-align: center; font-family: "Bangers", Impact, sans-serif; font-size: 21cqw; line-height: .8; color: #e53935; -webkit-text-stroke: 1.1cqw #111; paint-order: stroke fill; text-shadow: 1.2cqw 1.2cqw 0 #111; transform: rotate(-7deg) skewX(-6deg); }
+  .stk-comic .stk-bubble { align-self: flex-end; background: #fff; border: .6cqw solid #111; border-radius: 50%; padding: 2.2cqw 4cqw; max-width: 54cqw; text-align: center; font-family: "Bangers", Impact, sans-serif; font-size: 4.6cqw; line-height: 1; color: #111; letter-spacing: .03em; }
+  .stk-comic .stk-bubble small { display: flex; flex-wrap: wrap; justify-content: center; gap: .3cqw 1cqw; font-family: system-ui, sans-serif; font-size: 2.4cqw; letter-spacing: 0; margin-top: .6cqw; font-weight: 700; }
+  /* 3 · Fichado */
+  .stk-mug .stk-in { --rot: 4deg; }
+  .stk-mug .stk-face { width: 72cqw; aspect-ratio: 4 / 3.3; background: repeating-linear-gradient(to bottom, transparent 0 4.3cqw, rgba(255,255,255,.22) 4.3cqw calc(4.3cqw + 1px)), linear-gradient(#5b6474, #3d4452); clip-path: polygon(0 0, 100% 0, 100% 86%, 88% 100%, 0 100%); display: grid; grid-template-columns: 1fr 1.25fr; gap: 5cqw; padding: 4cqw; align-items: center; color: #fff; }
+  .stk-mug .stk-pawn { justify-self: center; position: relative; width: 22cqw; height: 32cqw; }
+  .stk-mug .stk-head { position: absolute; left: 50%; top: 0; width: 12cqw; height: 12cqw; border-radius: 50%; transform: translateX(-50%); background: var(--c); box-shadow: inset -1.5cqw -1.5cqw 0 rgba(0,0,0,.25); }
+  .stk-mug .stk-body { position: absolute; left: 0; right: 0; bottom: 6cqw; top: 10cqw; background: var(--c); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); }
+  .stk-mug .stk-plate { position: absolute; left: -1.5cqw; right: -1.5cqw; bottom: 0; background: #111; border: .4cqw solid #ddd; font-family: "Special Elite", ui-monospace, monospace; font-size: 2.3cqw; text-align: center; padding: .8cqw; line-height: 1.2; overflow-wrap: anywhere; }
+  .stk-mug h3 { margin-bottom: 1cqw; font-family: "Special Elite", ui-monospace, monospace; font-size: 9.5cqw; line-height: .9; }
+  .stk-mug p { margin: .4cqw 0; font-family: "Special Elite", ui-monospace, monospace; font-size: 3cqw; line-height: 1.25; }
+  .stk-mug .stk-stamp { position: absolute; right: 3cqw; bottom: 6cqw; transform: rotate(-14deg); border: .8cqw solid #ff4d4d; color: #ff4d4d; font-family: "Bungee", Impact, sans-serif; font-size: 5cqw; padding: .4cqw 1.6cqw; border-radius: 1cqw; opacity: .9; mix-blend-mode: screen; }
+  .stk-mug .stk-curl { position: absolute; right: 0; bottom: 0; width: 8.6cqw; height: 8cqw; background: linear-gradient(135deg, transparent 49%, #fff 50%, #e8e8e8 70%, #bdbdbd 100%); box-shadow: -.6cqw -.6cqw 1.2cqw rgba(0,0,0,.25); }
+  /* 4 · Lápide */
+  .stk-rip .stk-in { --rot: -3deg; }
+  .stk-rip .stk-face { width: 58cqw; height: 66cqw; border-radius: 29cqw 29cqw 2cqw 2cqw; text-align: center; padding: 9cqw 5cqw 0; color: #2c313a; background: radial-gradient(circle at 30% 20%, #d7dbe0, #a9afb8 70%, #8c939d); display: flex; flex-direction: column; align-items: center; gap: 1.2cqw; }
+  .stk-rip h3 { font-family: "Bungee", Impact, sans-serif; font-size: 11cqw; letter-spacing: .06em; color: #6e7581; text-shadow: -.3cqw -.3cqw 0 rgba(0,0,0,.35), .3cqw .3cqw 0 rgba(255,255,255,.6); }
+  .stk-rip .stk-who { font-size: 3.6cqw; line-height: 1.5; }
+  .stk-rip .stk-phrase { font-family: "Permanent Marker", cursive; font-size: 4.8cqw; color: #3b3f47; margin-top: .8cqw; }
+  .stk-rip .stk-grass { position: absolute; left: -2cqw; right: -2cqw; bottom: 0; height: 9cqw; background: linear-gradient(#4caf50, #2e7d32); clip-path: polygon(0 40%, 4% 0, 8% 45%, 12% 5%, 16% 40%, 21% 0, 25% 45%, 30% 8%, 34% 40%, 39% 0, 43% 45%, 48% 6%, 52% 42%, 57% 0, 61% 45%, 66% 8%, 70% 40%, 75% 0, 79% 45%, 84% 6%, 88% 42%, 93% 0, 97% 40%, 100% 10%, 100% 100%, 0 100%); }
+  .stk-rip .stk-flower { position: absolute; bottom: 4cqw; font-size: 5cqw; }
+  /* 5 · Bilhete */
+  .stk-note .stk-in { --rot: 3deg; }
+  .stk-note .stk-face { width: 64cqw; padding: 7cqw 5cqw 5cqw 9cqw; color: #1d2a6b; overflow: visible; background: linear-gradient(90deg, transparent 6.4cqw, rgba(229,57,53,.5) 6.4cqw calc(6.4cqw + 2px), transparent calc(6.4cqw + 2px)), repeating-linear-gradient(to bottom, #fffdf3 0 5.6cqw, #b8d0ef 5.6cqw calc(5.6cqw + 1px)); }
+  .stk-note .stk-face::after { display: none; }
+  .stk-note h3 { font-family: "Permanent Marker", cursive; font-size: 8.4cqw; line-height: 1.05; color: #c62828; transform: rotate(-3deg); overflow-wrap: anywhere; }
+  .stk-note .stk-phrase { font-family: "Permanent Marker", cursive; font-size: 5.6cqw; line-height: 1.15; margin-top: 2cqw; }
+  .stk-note .stk-sign { font-family: "Permanent Marker", cursive; font-size: 4cqw; text-align: right; margin-top: 2.5cqw; }
+  .stk-note .stk-ps { font-size: 2.8cqw; color: #4a5487; margin-top: 1.4cqw; }
+  .stk-note .stk-tape { position: absolute; top: -3cqw; width: 20cqw; height: 6.4cqw; background: rgba(245,232,190,.82); box-shadow: 0 .4cqw .8cqw rgba(0,0,0,.15); clip-path: polygon(0 8%, 4% 0, 8% 10%, 12% 0, 88% 0, 92% 10%, 96% 0, 100% 8%, 100% 92%, 96% 100%, 92% 90%, 88% 100%, 12% 100%, 8% 90%, 4% 100%, 0 92%); }
+  .stk-note .stk-tape.l { left: -5cqw; transform: rotate(-32deg); }
+  .stk-note .stk-tape.r { right: -5cqw; transform: rotate(28deg); }
+  /* 6 · Holográfico */
+  .stk-holo .stk-in { --rot: 0deg; }
+  @property --stk-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  .stk-holo .stk-face, .sst-holo { background: conic-gradient(from var(--stk-a, 0deg), #ff9bd2, #ffd66b, #a6ff9a, #7fe3ff, #b59bff, #ff9bd2) !important; animation: stkHue 3s linear infinite; }
+  .stk-holo .stk-face { width: 64cqw; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; }
+  @keyframes stkHue { to { --stk-a: 360deg; } }
+  .stk-holo .stk-face::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.75), transparent 45%); mix-blend-mode: soft-light; }
+  .stk-holo svg { position: absolute; inset: 0; width: 100%; height: 100%; animation: stkSpin 14s linear infinite; }
+  @keyframes stkSpin { to { transform: rotate(360deg); } }
+  .stk-holo svg text { font-family: "Bungee", Impact, sans-serif; font-size: 9px; fill: #2a1650; letter-spacing: 1px; }
+  .stk-holo .stk-center { position: relative; text-align: center; display: flex; flex-direction: column; align-items: center; gap: .6cqw; }
+  .stk-holo .stk-emoji { font-size: 20cqw; line-height: 1; }
+  .stk-holo .stk-phrase { font-family: "Bungee", Impact, sans-serif; font-size: 4.2cqw; color: #2a1650; max-width: 40cqw; line-height: 1.05; }
+  .stk-holo .stk-sub { font-size: 2.6cqw; color: #2a1650; background: rgba(255,255,255,.7); padding: .6cqw 1.6cqw; border-radius: 99px; display: flex; flex-wrap: wrap; justify-content: center; gap: .3cqw 1cqw; max-width: 44cqw; }
+  @media (prefers-reduced-motion: reduce) { .stk-holo .stk-face, .sst-holo, .stk-holo svg { animation: none; } }
+
+  /* ---------- Stickers enviados entre jogadores (tamanho em --u: 100u = largura do adesivo) ---------- */
+  .sst { position: absolute; transform: translate(-50%, -50%); z-index: 270; pointer-events: none; --u: .3cqw; display: flex; flex-direction: column; align-items: center; gap: calc(3 * var(--u)); }
+  .sst-cut { filter: drop-shadow(calc(1.8 * var(--u)) 0 0 #fff) drop-shadow(calc(-1.8 * var(--u)) 0 0 #fff) drop-shadow(0 calc(1.8 * var(--u)) 0 #fff) drop-shadow(0 calc(-1.8 * var(--u)) 0 #fff) drop-shadow(0 calc(3 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.45)); }
+  .sst-face { position: relative; overflow: hidden; width: calc(100 * var(--u)); aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: calc(2 * var(--u)); padding: calc(12 * var(--u)); background: var(--bg); color: var(--fg); }
+  .sst-face::after { content: ""; position: absolute; inset: -20%; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.5) 50%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+  .slap .sst-face::after { animation: stkShine .9s .45s ease-out both; }
+  .sst-emoji { font-size: calc(32 * var(--u)); line-height: 1; }
+  .sst-text { font-family: var(--f, "Bungee"), Impact, sans-serif; font-size: calc(var(--fs, 11) * var(--u)); line-height: .95; letter-spacing: .02em; text-wrap: balance; }
+  .sst-pill { aspect-ratio: auto; width: calc(124 * var(--u)); flex-direction: row; border-radius: 999px; padding: calc(8 * var(--u)) calc(12 * var(--u)); }
+  .sst-pill .sst-emoji { font-size: calc(24 * var(--u)); }
+  .sst-circle { border-radius: 50%; }
+  .sst-square { border-radius: calc(18 * var(--u)); }
+  .sst-bubble { border-radius: 50% 50% 50% 10%; }
+  .sst-octagon { clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .sst-ticket { aspect-ratio: 1.35; width: calc(116 * var(--u)); -webkit-mask: radial-gradient(circle at left, transparent calc(9 * var(--u)), #000 calc(9 * var(--u) + 1px)) left / 51% 100% no-repeat, radial-gradient(circle at right, transparent calc(9 * var(--u)), #000 calc(9 * var(--u) + 1px)) right / 51% 100% no-repeat; mask: radial-gradient(circle at left, transparent calc(9 * var(--u)), #000 calc(9 * var(--u) + 1px)) left / 51% 100% no-repeat, radial-gradient(circle at right, transparent calc(9 * var(--u)), #000 calc(9 * var(--u) + 1px)) right / 51% 100% no-repeat; }
+  .sst-hazard { aspect-ratio: 1.3; width: calc(116 * var(--u)); border: calc(6 * var(--u)) solid transparent; background: linear-gradient(var(--bg), var(--bg)) padding-box, repeating-linear-gradient(45deg, #111 0 calc(6 * var(--u)), #ffd23f calc(6 * var(--u)) calc(12 * var(--u))) border-box; }
+  .sst-dice .sst-emoji { filter: drop-shadow(0 calc(1.5 * var(--u)) 0 rgba(0,0,0,.25)); }
+  .sst-from { font-size: calc(6.5 * var(--u)); background: rgba(15,23,42,.9); color: #fff; padding: calc(1.5 * var(--u)) calc(4 * var(--u)); border-radius: 99px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); display: inline-flex; align-items: center; gap: .4em; }
+  .sst-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .sst-tile { position: relative; aspect-ratio: 1; container-type: inline-size; border-radius: .9rem; background: rgba(148, 163, 184, .1); display: grid; place-items: center; transition: transform .1s, background .2s; }
+  .sst-tile:hover, .sst-tile:focus-visible { background: rgba(148, 163, 184, .22); }
+  .sst-tile:active { transform: scale(.95); }
+  .sst-tile .sst-cut { --u: .72cqw; }
+  .sst-to { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sst-to button { min-height: 36px; padding: 4px 12px; border-radius: 99px; background: rgba(148, 163, 184, .14); font-weight: 600; font-size: .9rem; display: inline-flex; align-items: center; gap: .4rem; }
+  .sst-to button[aria-pressed="true"] { background: #f59e0b; color: #111827; }
 </style>
 </head>
 <body>
@@ -1474,6 +1583,9 @@ async function playEvents(events) {
         e.victims.forEach(v => clearOv(v.color, v.piece));
         layoutTokens(new Set(e.victims.map(v => `${v.color}-${v.piece}`)));
         moveSummary = `capturou ${names}`;
+        // Adesivo só na tela de quem teve o peão preso (humano deste aparelho)
+        const victimSeat = e.victims.map(v => s.seats.find(x => x.color === v.color)).find(x => x && isLocalSeat(x));
+        if (victimSeat && seat) showCaptureSticker(seat, victimSeat);
         await wait(quick ? 200 : 500);
         break;
       }
@@ -1922,6 +2034,7 @@ function renderEmotes() {
   if (!mine) return;
   if (!box.childElementCount) {
     EMOTES.forEach(em => box.append(h('button', { class: 'emote-btn', 'aria-label': `Enviar ${em}`, onclick: () => sendEmote(em) }, em)));
+    renderStickerButton(box);
   }
 }
 
@@ -1931,7 +2044,7 @@ function sendEmote(emoji) {
   if (!seat || Date.now() - lastEmoteAt < EMOTE_COOLDOWN) return;
   lastEmoteAt = Date.now();
   track('online/emote', 'Enviou emote');
-  const btns = [...document.querySelectorAll('.emote-btn')];
+  const btns = [...document.querySelectorAll('.emote-btn:not(#sticker-btn)')];
   btns.forEach(b => { b.disabled = true; });
   setTimeout(() => btns.forEach(b => { b.disabled = false; }), EMOTE_COOLDOWN);
   if (Net.role === 'client') Net.send({ type: 'EMOTE', payload: { emoji } });
@@ -1941,6 +2054,203 @@ function sendEmote(emoji) {
 function hostEmote(seatIdx, emoji) {
   Net.broadcast({ type: 'EMOTE', payload: { seat: seatIdx, emoji } });
   showEmote(seatIdx, emoji);
+}
+
+/* ---------- Adesivos de captura ----------
+   Aparecem só no aparelho de quem teve o peão preso, com um dos 6 modelos sorteado. */
+const CAPTURE_STICKERS = [
+  { id: 'boom', phrases: ['{v}, volta pra casinha!', 'Começa tudo de novo, {v}!', 'Andou, andou… e voltou!'] },
+  { id: 'comic', phrases: ['Foi de base, {v}!', 'Essa doeu até aqui!', 'Nem viu de onde veio, né {v}?'] },
+  { id: 'mug', phrases: ['Crime: ficar no caminho de {c}', 'Crime: andar devagar demais', 'Crime: confiar demais na sorte'] },
+  { id: 'rip', phrases: ['Descanse na base.', 'Partiu cedo demais. Ou não.', 'Saudades? Nenhuma.'] },
+  { id: 'note', phrases: ['Chora não, {v}.', 'Tenta de novo, vai que agora dá.', 'Foi mal… mentira, foi ótimo.'] },
+  { id: 'holo', phrases: ['Aceita que dói menos, {v}', 'Senta e chora', '{c} rindo até agora'] },
+];
+let lastCaptureSticker = -1, captureTimer = null;
+const stkPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const stkTag = (seat) => h('span', { class: 'stk-tag' },
+  h('span', { class: 'stk-dot', style: `background:var(--${seat.color})`, text: CMETA[seat.color].sym }), seat.name);
+const stkWho = (captor, victim) => [stkTag(captor), ' prendeu ', stkTag(victim)];
+function burstClip(n, inner) {
+  const pts = [];
+  for (let i = 0; i < n * 2; i++) { const r = i % 2 ? inner : 50, a = Math.PI * i / n - Math.PI / 2; pts.push(`${(50 + r * Math.cos(a)).toFixed(2)}% ${(50 + r * Math.sin(a)).toFixed(2)}%`); }
+  return `polygon(${pts.join(',')})`;
+}
+
+function buildCaptureSticker(id, captor, victim) {
+  const def = CAPTURE_STICKERS.find(x => x.id === id);
+  const phrase = stkPick(def.phrases).replace('{v}', victim.name).replace('{c}', captor.name);
+  let face, outline = 'stk-diecut';
+  switch (id) {
+    case 'boom':
+      face = h('div', { class: 'stk-face', style: `clip-path:${burstClip(18, 41)}` },
+        h('h3', { text: 'PRESO!' }), h('div', { class: 'stk-sub' }, ...stkWho(captor, victim)), h('div', { class: 'stk-phrase', text: phrase }));
+      break;
+    case 'comic':
+      face = h('div', { class: 'stk-face' },
+        h('div', { class: 'stk-caption', text: 'ENQUANTO ISSO, NA BASE…' }), h('h3', { text: 'POW!' }),
+        h('div', { class: 'stk-bubble' }, phrase, h('small', {}, ...stkWho(captor, victim))));
+      break;
+    case 'mug':
+      face = h('div', { class: 'stk-face', style: `--c:var(--${victim.color})` },
+        h('div', { class: 'stk-pawn' }, h('div', { class: 'stk-body' }), h('div', { class: 'stk-head' }),
+          h('div', { class: 'stk-plate' }, 'DEPTO. DE LUDO', h('br'), victim.name.toUpperCase(), h('br'), `Nº ${Math.floor(Math.random() * 9000) + 1000}`)),
+        h('div', {}, h('h3', { text: 'FICHADO!' }), h('p', { text: phrase }), h('p', {}, 'Detido por: ', stkTag(captor)), h('p', { text: 'Pena: volta pra base' })),
+        h('div', { class: 'stk-stamp', text: 'PRESO' }), h('div', { class: 'stk-curl' }));
+      break;
+    case 'rip':
+      face = h('div', { class: 'stk-face' },
+        h('h3', { text: 'R.I.P.' }),
+        h('div', { class: 'stk-who' }, 'Aqui jaz o peão de ', stkTag(victim), h('br'), 'preso por ', stkTag(captor)),
+        h('div', { class: 'stk-phrase', text: phrase }), h('div', { class: 'stk-grass' }),
+        h('span', { class: 'stk-flower', style: 'left:10cqw', text: '🌼' }), h('span', { class: 'stk-flower', style: 'right:9cqw', text: '🥀' }));
+      break;
+    case 'note':
+      outline = 'stk-flat';
+      face = h('div', { class: 'stk-face' },
+        h('div', { class: 'stk-tape l' }), h('div', { class: 'stk-tape r' }),
+        h('h3', { text: `Tchau, ${victim.name}! 👋` }), h('div', { class: 'stk-phrase', text: phrase }),
+        h('div', { class: 'stk-sign' }, '— ', stkTag(captor)),
+        h('div', { class: 'stk-ps', text: `P.S.: ${victim.name}, seu peão voltou pra base.` }));
+      break;
+    case 'holo': {
+      face = h('div', { class: 'stk-face' },
+        h('div', { class: 'stk-center' }, h('div', { class: 'stk-emoji', text: '😂' }), h('div', { class: 'stk-phrase', text: phrase }),
+          h('div', { class: 'stk-sub' }, ...stkWho(captor, victim))));
+      const ring = 'KKKKKKK • VOLTA PRA BASE • KKKKKKK • VOLTA PRA BASE • ';
+      face.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><path id="stk-ring" d="M50,50 m-41,0 a41,41 0 1,1 82,0 a41,41 0 1,1 -82,0"/></defs><text><textPath href="#stk-ring">${ring}</textPath></text></svg>`);
+      break;
+    }
+  }
+  return h('div', { class: `stk stk-${id}`, role: 'status', 'aria-label': `${captor.name} prendeu o peão de ${victim.name}. ${phrase}` },
+    h('div', { class: `stk-in ${outline} slap` }, face));
+}
+
+function peelOff(el, after) {
+  const inner = el.firstChild;
+  inner.classList.remove('slap'); inner.classList.add('peel');
+  setTimeout(() => { el.remove(); after && after(); }, 600);
+}
+
+function showCaptureSticker(captor, victim) {
+  const wrap = $('.board-wrap');
+  if (!wrap || $('#screen-game').hidden) return;
+  clearTimeout(captureTimer);
+  wrap.querySelectorAll('.stk').forEach(x => x.remove());
+  wrap.classList.remove('stk-shake', 'stk-dim');
+  void wrap.offsetWidth;
+  let i;
+  do { i = Math.floor(Math.random() * CAPTURE_STICKERS.length); } while (i === lastCaptureSticker);
+  lastCaptureSticker = i;
+  const el = buildCaptureSticker(CAPTURE_STICKERS[i].id, captor, victim);
+  wrap.append(el);
+  wrap.classList.add('stk-dim');
+  setTimeout(() => wrap.classList.add('stk-shake'), 220);
+  captureTimer = setTimeout(() => peelOff(el, () => wrap.classList.remove('stk-shake', 'stk-dim')), 2800);
+}
+
+/* ---------- Stickers que os jogadores mandam entre si (online) ---------- */
+const SEND_STICKERS = [
+  { id: 'chegando', emoji: '🏃', text: 'TÔ CHEGANDO!', shape: 'pill', bg: '#ff8a1f', fg: '#fff', rot: -5 },
+  { id: 'sorte', emoji: '🍀', text: 'SORTE DE PRINCIPIANTE', shape: 'burst', bg: '#2e9e4f', fg: '#fff', f: 'Bangers', fs: 12, rot: 6 },
+  { id: 'demora', emoji: '⏳', text: 'VAI DEMORAR?', shape: 'bubble', bg: '#ffffff', fg: '#1e293b', f: 'Permanent Marker', fs: 12, rot: -4 },
+  { id: 'gg', emoji: '🤝', text: 'GG!', shape: 'circle holo', bg: '#b59bff', fg: '#2a1650', fs: 16, rot: 0 },
+  { id: 'seis', emoji: '🎲', text: 'MANDA UM 6!', shape: 'square dice', bg: '#ffffff', fg: '#e53935', rot: 5 },
+  { id: 'nemvem', emoji: '✋', text: 'NEM VEM!', shape: 'octagon', bg: '#d32f2f', fg: '#fff', rot: -3 },
+  { id: 'olho', emoji: '👀', text: 'TÔ DE OLHO', shape: 'ticket', bg: '#7c3aed', fg: '#fff', rot: 4 },
+  { id: 'chora', emoji: '😭', text: 'CHORA MAIS', shape: 'circle', bg: '#1e88e5', fg: '#fff', f: 'Bangers', fs: 15, rot: -6 },
+  { id: 'boa', emoji: '👏', text: 'BOA JOGADA!', shape: 'seal', bg: 'radial-gradient(circle at 40% 35%, #fff1a8, #f4b400 60%, #c98a00)', fg: '#5a3b00', fs: 10, rot: 3 },
+  { id: 'socorro', emoji: '🆘', text: 'SOCORRO!', shape: 'hazard', bg: '#ffd23f', fg: '#111', rot: -4 },
+];
+const SEND_IDS = SEND_STICKERS.map(x => x.id);
+const STICKER_COOLDOWN = 4000;
+let lastStickerAt = 0, stickerTarget = 'all';
+
+function buildSendSticker(id) {
+  const d = SEND_STICKERS.find(x => x.id === id);
+  const shapes = d.shape.split(' ');
+  let clip = '';
+  if (shapes.includes('burst')) clip = `clip-path:${burstClip(14, 40)};`;
+  if (shapes.includes('seal')) clip = `clip-path:${burstClip(24, 45)};`;
+  const face = h('div', {
+    class: 'sst-face ' + shapes.map(x => (x === 'holo' ? 'sst-holo' : 'sst-' + x)).join(' '),
+    style: `--bg:${d.bg};--fg:${d.fg};${d.f ? `--f:"${d.f}";` : ''}${d.fs ? `--fs:${d.fs};` : ''}${clip}`,
+  }, h('span', { class: 'sst-emoji', text: d.emoji }), h('span', { class: 'sst-text', text: d.text }));
+  return h('div', { class: 'sst-cut stk-in', style: `--rot:${d.rot}deg` }, face);
+}
+
+function renderStickerButton(box) {
+  box.append(h('button', { class: 'emote-btn', id: 'sticker-btn', 'aria-label': 'Mandar sticker', onclick: openStickerPicker },
+    h('i', { class: 'fa-solid fa-note-sticky text-xl text-amber-400' })));
+}
+
+function openStickerPicker() {
+  const s = Game.state;
+  const me = s && s.seats.find(isLocalSeat);
+  if (!me) return;
+  const others = s.seats.filter(x => !x.isBot && x.seat !== me.seat);
+  if (stickerTarget !== 'all' && !others.some(x => x.seat === stickerTarget)) stickerTarget = 'all';
+  const toBox = h('div', { class: 'sst-to', role: 'group', 'aria-label': 'Para quem' });
+  const drawTo = () => toBox.replaceChildren(
+    h('button', { 'aria-pressed': String(stickerTarget === 'all'), onclick: () => { stickerTarget = 'all'; drawTo(); } }, h('i', { class: 'fa-solid fa-users' }), 'Todos'),
+    ...others.map(o => h('button', { 'aria-pressed': String(stickerTarget === o.seat), onclick: () => { stickerTarget = o.seat; drawTo(); } }, stkTag(o))));
+  drawTo();
+  const cool = Math.max(0, STICKER_COOLDOWN - (Date.now() - lastStickerAt));
+  let close;
+  close = openModal(h('div', {},
+    h('h2', { class: 'text-xl font-black mb-3', text: 'Mandar sticker' }),
+    h('div', { class: 'text-xs uppercase tracking-wider text-slate-400 mb-2', text: 'Para quem' }), toBox,
+    h('div', { class: 'text-xs uppercase tracking-wider text-slate-400 mt-4 mb-2', text: cool ? `Aguarde ${Math.ceil(cool / 1000)}s para mandar outro` : 'Escolha um sticker' }),
+    h('div', { class: 'sst-grid' }, SEND_STICKERS.map(d => h('button', {
+      class: 'sst-tile', 'aria-label': `Mandar "${d.text}"`,
+      onclick: () => { close(); sendSticker(d.id, stickerTarget === 'all' ? null : stickerTarget); },
+    }, buildSendSticker(d.id)))),
+    h('button', { class: 'btn btn-ghost w-full mt-4', onclick: () => close() }, 'Fechar')));
+}
+
+function sendSticker(id, to) {
+  const s = Game.state;
+  const me = s && s.seats.find(isLocalSeat);
+  if (!me || !SEND_IDS.includes(id)) return;
+  if (Date.now() - lastStickerAt < STICKER_COOLDOWN) { toast('Calma! Espere um pouquinho para mandar outro.'); return; }
+  lastStickerAt = Date.now();
+  track(`online/sticker/${id}`, 'Enviou sticker');
+  track(to == null ? 'online/sticker-para/todos' : 'online/sticker-para/jogador', 'Destino do sticker');
+  if (Net.role === 'client') Net.send({ type: 'STICKER', payload: { id, to } });
+  else hostSticker(me.seat, id, to);
+}
+
+// Anfitrião: valida e repassa para todos; cada aparelho decide se mostra.
+function hostSticker(from, id, to) {
+  const s = Game.state;
+  if (!s || !SEND_IDS.includes(id)) return;
+  if (to != null && !(Number.isInteger(to) && s.seats[to] && !s.seats[to].isBot && to !== from)) return;
+  const payload = { from, id, to: to == null ? null : to };
+  Net.broadcast({ type: 'STICKER', payload });
+  showSendSticker(payload);
+}
+
+function showSendSticker({ from, id, to }) {
+  const s = Game.state;
+  const wrap = $('.board-wrap');
+  if (!s || !wrap || $('#screen-game').hidden || !SEND_IDS.includes(id)) return;
+  const sender = s.seats[from];
+  if (!sender) return;
+  const target = to == null ? null : s.seats[to];
+  const mine = isLocalSeat(sender);
+  // Privado: só aparece para quem mandou e para o destinatário
+  if (target && !mine && !isLocalSeat(target)) return;
+  const label = h('div', { class: 'sst-from' }, stkTag(sender), h('i', { class: 'fa-solid fa-arrow-right text-[.8em] opacity-70' }),
+    target ? (isLocalSeat(target) ? 'você' : stkTag(target)) : 'todos');
+  const inner = buildSendSticker(id);
+  inner.classList.add('slap');
+  const el = h('div', { class: 'sst', style: `left:${30 + Math.random() * 40}%;top:${30 + Math.random() * 35}%`, role: 'status',
+    'aria-label': `${sender.name} mandou: ${SEND_STICKERS.find(x => x.id === id).text}` }, inner, label);
+  const all = wrap.querySelectorAll('.sst');
+  if (all.length >= 3) all[0].remove();
+  wrap.append(el);
+  Sound.play('turn');
+  setTimeout(() => peelOff(el), 3000);
 }
 
 function showEmote(seatIdx, emoji) {
@@ -2457,6 +2767,13 @@ function hostHandle(conn, msg) {
       hostEmote(seat.seat, p.emoji);
       break;
     }
+    case 'STICKER': {
+      const seat = member && Game.state && L.phase === 'game' ? Game.state.seats.find(x => x.owner === member.id) : null;
+      if (!seat || Date.now() - (Net.emoteAt.get('stk:' + member.id) || 0) < STICKER_COOLDOWN - 300) break;
+      Net.emoteAt.set('stk:' + member.id, Date.now());
+      hostSticker(seat.seat, p.id, p.to);
+      break;
+    }
     case 'ROLL_REQUEST':
     case 'MOVE_REQUEST':
       if (member) hostIntent(conn, member, msg);
@@ -2721,6 +3038,9 @@ function clientHandle(msg) {
       break;
     case 'EMOTE':
       showEmote(p.seat, p.emoji);
+      break;
+    case 'STICKER':
+      showSendSticker(p);
       break;
     case 'PONG': {
       const now = Date.now();
