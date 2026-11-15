@@ -1408,8 +1408,16 @@ function proceed() {
   Net.broadcastState();
 }
 
+// Nenhuma pessoa presente (todos os humanos offline ou ausentes): só robôs jogariam, então a partida espera.
+function waitingForHumans(s) {
+  if (!s || s.phase !== 'playing') return false;
+  const humans = s.seats.filter(x => !x.isBot);
+  return humans.length > 0 && humans.every(x => x.connected === false || x.afk);
+}
+
 function scheduleNext(s) {
   if (s.phase !== 'playing' || Game.paused || Game.busy) return;
+  if (waitingForHumans(s)) { s.turn.deadline = null; return; } // retoma quando alguém voltar (proceed)
   const seat = currentSeat();
   if (isAuto(seat)) {
     const delay = seat.isBot ? botDelay() : 2000;
@@ -1449,7 +1457,7 @@ function startTurnTimer() {
 
 function onTimeout() {
   const s = Game.state;
-  if (!s || Game.busy || Game.paused || s.phase !== 'playing') return;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing' || waitingForHumans(s)) return;
   const seat = currentSeat();
   if (seat.isBot) return;
   seat.timeouts++;
@@ -1463,7 +1471,7 @@ function onTimeout() {
 
 async function botAct() {
   const s = Game.state;
-  if (!s || Game.busy || Game.paused || s.phase !== 'playing') return;
+  if (!s || Game.busy || Game.paused || s.phase !== 'playing' || waitingForHumans(s)) return;
   const seat = currentSeat();
   if (!isAuto(seat)) return;
   if (s.turn.awaiting === 'roll') await actRoll('auto');
@@ -1857,6 +1865,7 @@ function renderStatus() {
   el.style.setProperty('--c', `var(--${seat.color})`);
   if (Game.statusOverride) { el.textContent = Game.statusOverride; return; }
   if (Game.paused) { el.textContent = 'Jogo pausado'; return; }
+  if (waitingForHumans(s)) { el.textContent = '⏸ Só restaram robôs — aguardando um jogador voltar…'; return; }
   let action;
   if (isLocalSeat(seat) && (Net.role === 'client' || !isAuto(seat))) {
     if (Net.pending) action = 'enviando…';
@@ -2173,6 +2182,46 @@ const SEND_STICKERS = [
   { id: 'chora', emoji: '😭', text: 'CHORA MAIS', shape: 'circle', bg: '#1e88e5', fg: '#fff', f: 'Bangers', fs: 15, rot: -6 },
   { id: 'boa', emoji: '👏', text: 'BOA JOGADA!', shape: 'seal', bg: 'radial-gradient(circle at 40% 35%, #fff1a8, #f4b400 60%, #c98a00)', fg: '#5a3b00', fs: 10, rot: 3 },
   { id: 'socorro', emoji: '🆘', text: 'SOCORRO!', shape: 'hazard', bg: '#ffd23f', fg: '#111', rot: -4 },
+  { id: 'denovo6', emoji: '🎲', text: 'SEIS DE NOVO!', shape: 'burst', bg: '#e53935', fg: '#fff', f: 'Bangers', fs: 13, rot: -5 },
+  { id: 'sai6', emoji: '🙏', text: 'SÓ PRECISO DE UM 6', shape: 'bubble', bg: '#fff8e1', fg: '#5a3b00', f: 'Permanent Marker', fs: 10, rot: 4 },
+  { id: 'um', emoji: '😩', text: 'TIREI 1 DE NOVO', shape: 'square dice', bg: '#ffffff', fg: '#1e293b', fs: 10, rot: -3 },
+  { id: 'dadoviciado', emoji: '🕵️', text: 'ESSE DADO TÁ VICIADO', shape: 'ticket', bg: '#37474f', fg: '#ffd23f', f: 'Special Elite', fs: 10, rot: 5 },
+  { id: 'trestres', emoji: '🚫', text: 'TRÊS 6 = PERDEU A VEZ', shape: 'octagon', bg: '#b71c1c', fg: '#fff', fs: 9, rot: -4 },
+  { id: 'saidabase', emoji: '🚪', text: 'SAÍ DA BASE!', shape: 'pill', bg: '#43a047', fg: '#fff', rot: 3 },
+  { id: 'presobase', emoji: '🔒', text: 'PRESO NA BASE', shape: 'square', bg: '#455a64', fg: '#fff', f: 'Special Elite', fs: 12, rot: -6 },
+  { id: 'voltacasa', emoji: '🏠', text: 'VOLTA PRA CASINHA', shape: 'bubble', bg: '#ff7043', fg: '#fff', f: 'Bangers', fs: 13, rot: 6 },
+  { id: 'comi', emoji: '😋', text: 'COMI SEU PEÃO', shape: 'circle', bg: '#8e24aa', fg: '#fff', f: 'Bangers', fs: 14, rot: -4 },
+  { id: 'vinganca', emoji: '😤', text: 'VOU ME VINGAR!', shape: 'burst', bg: '#212121', fg: '#ff5252', f: 'Bangers', fs: 13, rot: 4 },
+  { id: 'nao', emoji: '😱', text: 'NÃAAAO!', shape: 'burst', bg: '#ffeb3b', fg: '#c62828', f: 'Bangers', fs: 16, rot: -7 },
+  { id: 'seguro', emoji: '⭐', text: 'TÔ NA CASA SEGURA', shape: 'seal', bg: 'radial-gradient(circle at 40% 35%, #c8f7ff, #26c6da 60%, #00838f)', fg: '#00363d', fs: 9, rot: 2 },
+  { id: 'nemencosta', emoji: '🛡️', text: 'AQUI NINGUÉM ME PEGA', shape: 'square', bg: '#1565c0', fg: '#fff', fs: 9, rot: 4 },
+  { id: 'reta', emoji: '🏁', text: 'RETA FINAL!', shape: 'ticket', bg: '#111827', fg: '#fff', f: 'Bangers', fs: 15, rot: -3 },
+  { id: 'cheguei', emoji: '🏆', text: 'CHEGUEI EM CASA!', shape: 'seal', bg: 'radial-gradient(circle at 40% 35%, #fff1a8, #f4b400 60%, #c98a00)', fg: '#5a3b00', fs: 10, rot: -2 },
+  { id: 'falta1', emoji: '☝️', text: 'FALTA SÓ UM PEÃO', shape: 'pill', bg: '#00897b', fg: '#fff', fs: 9, rot: -4 },
+  { id: 'quase', emoji: '🤏', text: 'QUASE…', shape: 'bubble', bg: '#ffffff', fg: '#1e293b', f: 'Permanent Marker', fs: 15, rot: 5 },
+  { id: 'faltou1', emoji: '🤦', text: 'FALTOU UMA CASA!', shape: 'circle', bg: '#f57c00', fg: '#fff', f: 'Bangers', fs: 13, rot: -5 },
+  { id: 'atras', emoji: '👣', text: 'TÔ LOGO ATRÁS DE VOCÊ', shape: 'hazard', bg: '#ffd23f', fg: '#111', fs: 9, rot: 3 },
+  { id: 'corre', emoji: '💨', text: 'CORRE, PEÃOZINHO!', shape: 'pill', bg: '#29b6f6', fg: '#0d2b45', f: 'Bangers', fs: 13, rot: 5 },
+  { id: 'bloqueio', emoji: '🧱', text: 'BLOQUEADO!', shape: 'octagon', bg: '#6d4c41', fg: '#fff', f: 'Bangers', fs: 15, rot: 3 },
+  { id: 'paz', emoji: '🕊️', text: 'BANDEIRA BRANCA?', shape: 'circle', bg: '#eceff1', fg: '#37474f', f: 'Permanent Marker', fs: 11, rot: -3 },
+  { id: 'alianca', emoji: '🤜🤛', text: 'ALIANÇA?', shape: 'circle holo', bg: '#80deea', fg: '#004d57', fs: 14, rot: 4 },
+  { id: 'traicao', emoji: '🗡️', text: 'TRAIÇÃO!', shape: 'burst', bg: '#4a148c', fg: '#fff', f: 'Bangers', fs: 16, rot: -6 },
+  { id: 'calculado', emoji: '🧠', text: 'TUDO CALCULADO', shape: 'square', bg: '#5e35b1', fg: '#fff', fs: 10, rot: 5 },
+  { id: 'sorteazar', emoji: '🍀', text: 'É SÓ SORTE', shape: 'ticket', bg: '#c8e6c9', fg: '#1b5e20', f: 'Permanent Marker', fs: 13, rot: -4 },
+  { id: 'suavez', emoji: '👉', text: 'SUA VEZ!', shape: 'pill', bg: '#fdd835', fg: '#3e2723', f: 'Bangers', fs: 16, rot: -2 },
+  { id: 'rolalogo', emoji: '😴', text: 'ROLA LOGO ESSE DADO', shape: 'bubble', bg: '#b0bec5', fg: '#263238', f: 'Permanent Marker', fs: 10, rot: 3 },
+  { id: 'revanche', emoji: '🔁', text: 'REVANCHE?', shape: 'circle holo', bg: '#ff8a80', fg: '#5d0000', fs: 13, rot: -4 },
+  { id: 'campeao', emoji: '👑', text: 'REI DO LUDO', shape: 'seal', bg: 'radial-gradient(circle at 40% 35%, #ffe0f0, #ec407a 60%, #ad1457)', fg: '#fff', f: 'Bangers', fs: 14, rot: 3 },
+  { id: 'dadoquente', emoji: '🔥', text: 'DADO TÁ QUENTE!', shape: 'burst', bg: '#ff6f00', fg: '#fff', f: 'Bangers', fs: 13, rot: 5 },
+  { id: 'dadofrio', emoji: '🥶', text: 'DADO GELADO', shape: 'circle', bg: '#4fc3f7', fg: '#01304a', f: 'Bangers', fs: 14, rot: -4 },
+  { id: 'soprei', emoji: '🌬️', text: 'SOPREI O DADO', shape: 'bubble', bg: '#e1f5fe', fg: '#01579b', f: 'Permanent Marker', fs: 11, rot: 4 },
+  { id: 'escapei', emoji: '😅', text: 'ESCAPEI POR POUCO', shape: 'pill', bg: '#7cb342', fg: '#fff', fs: 9, rot: -3 },
+  { id: 'kamikaze', emoji: '💥', text: 'PEÃO KAMIKAZE', shape: 'hazard', bg: '#ffd23f', fg: '#111', fs: 10, rot: 4 },
+  { id: 'todosfora', emoji: '🐎', text: 'TODO MUNDO PRA FORA!', shape: 'square', bg: '#2e7d32', fg: '#fff', fs: 9, rot: -5 },
+  { id: 'emcasa', emoji: '😎', text: 'SEGUE O LÍDER', shape: 'ticket', bg: '#ffb300', fg: '#3e2723', f: 'Bangers', fs: 14, rot: 3 },
+  { id: 'ultimo', emoji: '🐢', text: 'DEVAGAR E SEMPRE', shape: 'circle', bg: '#a5d6a7', fg: '#1b5e20', f: 'Permanent Marker', fs: 11, rot: -2 },
+  { id: 'virada', emoji: '🔄', text: 'VAI TER VIRADA!', shape: 'burst', bg: '#00acc1', fg: '#fff', f: 'Bangers', fs: 13, rot: -6 },
+  { id: 'obrigado', emoji: '🙇', text: 'VALEU PELO PEÃO!', shape: 'octagon', bg: '#f06292', fg: '#fff', fs: 10, rot: 4 },
 ];
 const SEND_IDS = SEND_STICKERS.map(x => x.id);
 const STICKER_COOLDOWN = 4000;
@@ -2443,6 +2492,12 @@ function loadScript(src) {
   });
 }
 const randomId = (n = 16) => [...crypto.getRandomValues(new Uint8Array(n))].map(x => x.toString(16).padStart(2, '0')).join('');
+// Chave fixa deste aparelho/perfil: permite reassumir o lugar mesmo sem o token da sala.
+const playerKey = (() => {
+  let k = Store.get('ludo:pid', null);
+  if (typeof k !== 'string' || k.length < 16) { k = randomId(); Store.set('ludo:pid', k); }
+  return k;
+})();
 const randomCode = () => [...crypto.getRandomValues(new Uint8Array(4))].map(x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('');
 // Cada troca de anfitrião abre a sala num ID novo: CODE, CODE-h1, CODE-h2…
 const peerIdFor = (code, epoch = 0) => PEER_PREFIX + code + (epoch ? '-h' + epoch : '');
@@ -2702,7 +2757,7 @@ async function hostRoom(restore, { takeover = false } = {}) {
   } else {
     const token = randomId();
     const me = {
-      id: randomId(8), token, tokenHash: await sha256hex(token), name: cleanName(profile.name) || 'Anfitrião', avatar: profile.avatar,
+      id: randomId(8), token, tokenHash: await sha256hex(token), pidHash: await sha256hex(playerKey), name: cleanName(profile.name) || 'Anfitrião', avatar: profile.avatar,
       color: 'red', ready: true, isHost: true, isBot: false, connected: true,
     };
     Net.myId = me.id;
@@ -2772,6 +2827,15 @@ function hostHandle(conn, msg) {
     case 'LEAVE':
       hostDrop(conn, true);
       break;
+    case 'BACK': {
+      const seat = member && Game.state && L.phase === 'game' ? Game.state.seats.find(x => x.owner === member.id) : null;
+      if (!seat || !seat.afk) break;
+      seat.afk = false;
+      seat.timeouts = 0;
+      toast(`${member.name} voltou`);
+      if (!Game.busy) proceed();
+      break;
+    }
     case 'EMOTE': {
       const seat = member && Game.state && L.phase === 'game' ? Game.state.seats.find(x => x.owner === member.id) : null;
       if (!seat || !EMOTES.includes(p.emoji) || Date.now() - (Net.emoteAt.get(member.id) || 0) < EMOTE_COOLDOWN - 300) break;
@@ -2804,6 +2868,33 @@ function pickSeatForNewcomer() {
   return bot.color;
 }
 
+// Quem caiu e voltou sem o token da sala (armazenamento limpo, outra aba/app, saiu e entrou de novo):
+// reconhece pela chave do aparelho ou, na partida em andamento, pelo mesmo nome de perfil.
+async function findReturningMember(p) {
+  const L = Net.lobby;
+  const now = Date.now();
+  // "Livre" = sem conexão viva (a antiga pode ainda não ter expirado se a internet caiu há pouco)
+  const isFree = (m) => !m.connected || ![...Net.conns.values()].some(i => i.memberId === m.id && now - i.lastSeen < 8000);
+  const others = L.members.filter(m => !m.isBot && m.id !== Net.myId);
+  let member = null;
+  if (typeof p.pid === 'string' && p.pid.length >= 16) {
+    const hash = await sha256hex(p.pid);
+    member = hash ? others.find(m => m.pidHash === hash) || null : null;
+  }
+  if (!member && L.phase === 'game' && Game.state) {
+    const name = cleanName(String(p.name || '')).toLowerCase();
+    const seated = (m) => Game.state.seats.some(s => s.owner === m.id);
+    const matches = name ? others.filter(m => seated(m) && isFree(m) && (m.name || '').toLowerCase() === name) : [];
+    if (matches.length === 1) member = matches[0];
+  }
+  if (!member) return null;
+  // Novo token para esta conexão (o antigo pode ter se perdido ou só existir como hash)
+  member.token = randomId();
+  member.tokenHash = await sha256hex(member.token);
+  if (typeof p.pid === 'string') member.pidHash = await sha256hex(p.pid);
+  return member;
+}
+
 async function hostJoin(conn, type, p) {
   const L = Net.lobby;
   let member = null;
@@ -2817,6 +2908,7 @@ async function hostJoin(conn, type, p) {
       if (member) member.token = p.token;
     }
   }
+  if (!member) member = await findReturningMember(p);
   if (!member) {
     const color = L.phase === 'lobby' ? pickSeatForNewcomer() : null;
     if (!color) {
@@ -2829,7 +2921,9 @@ async function hostJoin(conn, type, p) {
     const humans = L.members.filter(m => !m.isBot).length;
     const token = randomId();
     member = {
-      id: randomId(8), token, tokenHash: await sha256hex(token), name: cleanName(String(p.name || '')) || `Jogador ${humans + 1}`,
+      id: randomId(8), token, tokenHash: await sha256hex(token),
+      pidHash: typeof p.pid === 'string' ? await sha256hex(p.pid) : null,
+      name: cleanName(String(p.name || '')) || `Jogador ${humans + 1}`,
       avatar: safeAvatar(p.avatar), color, ready: false, isHost: false, isBot: false, connected: true,
     };
     L.members.push(member);
@@ -2843,7 +2937,12 @@ async function hostJoin(conn, type, p) {
   lobbyChanged();
   if (Game.state && L.phase === 'game') {
     const seat = Game.state.seats.find(s => s.owner === member.id);
-    if (seat && seat.connected === false) { seat.connected = true; toast(`${member.name} voltou`); }
+    if (seat && (seat.connected === false || seat.afk)) {
+      seat.connected = true;
+      seat.afk = false;
+      seat.timeouts = 0;
+      toast(`${member.name} voltou`);
+    }
     if (!Game.busy) proceed();
     else sendTo(conn, { type: 'STATE', payload: { state: Net.publicState() } });
   }
@@ -2975,7 +3074,7 @@ function clientConnect() {
       Net.lostAt = null;
       Net.epoch = target;
       $('#net-banner').hidden = true;
-      const who = { name: cleanName(profile.name), avatar: profile.avatar };
+      const who = { name: cleanName(profile.name), avatar: profile.avatar, pid: playerKey };
       Net.send(Net.myToken ? { type: 'REJOIN', payload: { token: Net.myToken, ...who } } : { type: 'JOIN', payload: who });
       Net.send({ type: 'PING', payload: { t: Date.now() } });
     });
@@ -3288,7 +3387,16 @@ function renderLobby() {
 /* ---------- Entradas globais ---------- */
 function clearAfkOnInteraction() {
   const s = Game.state;
-  if (!s || $('#screen-game').hidden || Net.role === 'client') return;
+  if (!s || $('#screen-game').hidden) return;
+  if (Net.role === 'client') {
+    // Convidado marcado como ausente avisa o anfitrião que voltou (a partida pode estar esperando por ele)
+    const mine = s.seats.find(seat => isLocalSeat(seat) && seat.afk);
+    if (mine && Net.connected && Date.now() - (clearAfkOnInteraction.sent || 0) > 2000) {
+      clearAfkOnInteraction.sent = Date.now();
+      Net.send({ type: 'BACK' });
+    }
+    return;
+  }
   let changed = false;
   s.seats.forEach(seat => { if (isLocalSeat(seat) && seat.afk) { seat.afk = false; seat.timeouts = 0; changed = true; } });
   if (changed) { toast('Bem-vindo de volta!'); if (!Game.busy) proceed(); }
