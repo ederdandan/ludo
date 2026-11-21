@@ -2,7 +2,7 @@
 // - Página (navegação): rede primeiro, cache se estiver offline → atualizações chegam na hora.
 // - Demais arquivos (ícones, bibliotecas das CDNs, fontes): cache primeiro e atualiza em segundo plano.
 // Troque a versão quando mudar a lista de arquivos pré-carregados.
-const VERSION = 'ludo-v1';
+const VERSION = 'ludo-v2';
 const CORE = [
   './',
   './index.html',
